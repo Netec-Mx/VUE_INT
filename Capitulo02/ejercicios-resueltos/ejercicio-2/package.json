@@ -1,0 +1,9 @@
+{
+  "name": "cap2-ejercicio-2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite"
+  }
+}

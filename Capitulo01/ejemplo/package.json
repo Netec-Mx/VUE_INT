@@ -1,0 +1,1 @@
+{"name": "capitulo-1-ejemplo", "private": true, "type": "module", "scripts": {"build": "vite build", "dev": "vite"}}

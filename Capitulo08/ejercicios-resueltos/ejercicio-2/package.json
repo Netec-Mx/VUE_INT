@@ -1,0 +1,14 @@
+{
+  "name": "capitulo-8-ejercicio-2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:staging": "vite build --mode staging --outDir dist-staging",
+    "build:production": "vite build --mode production --outDir dist-production",
+    "build": "npm run build:staging && npm run build:production",
+    "preview:staging": "vite preview --outDir dist-staging",
+    "preview:production": "vite preview --outDir dist-production",
+    "verificar-fuga": "grep -r \"staging\" dist-production/assets/ ; test $? -eq 1"
+  }
+}

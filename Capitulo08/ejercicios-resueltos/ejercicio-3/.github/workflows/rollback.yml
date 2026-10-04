@@ -1,0 +1,43 @@
+name: Rollback manual a un despliegue anterior   # Aparece en Actions como una entrada propia, separada del despliegue normal
+on:                                              # Este flujo nunca se dispara solo
+  workflow_dispatch:                             # Solo a mano, desde el boton Run workflow
+    inputs:                                      # Datos que pide antes de arrancar
+      artefacto:                                 # Nombre del artefacto guardado que se quiere republicar
+        description: Nombre del artefacto de una ejecucion anterior (github-pages)
+        required: true                           # Sin este dato no arranca; obliga a elegir a conciencia
+        default: github-pages                    # Nombre estandar que deja actions/upload-pages-artifact
+      ejecucion:                                 # Numero de la ejecucion de donde se toma ese artefacto
+        description: ID de la ejecucion de deploy.yml que quedo buena
+        required: true                           # Tambien obligatorio; es lo que identifica la version buena
+      motivo:                                    # Queda escrito en el historial de Actions
+        description: Motivo del rollback, una linea
+        required: false                          # Opcional para no frenar a quien esta apagando el incendio
+permissions:                                     # Permisos minimos, igual que en el flujo de despliegue
+  contents: read                                 # Leer el repositorio
+  pages: write                                   # Publicar en GitHub Pages
+  id-token: write                                # Pedir el token temporal de identidad
+  actions: read                                  # Leer artefactos de ejecuciones anteriores
+concurrency:                                     # Comparte turno con el despliegue normal
+  group: pages                                   # Mismo grupo que deploy.yml: nunca corren los dos a la vez
+  cancel-in-progress: true                       # Un rollback cancela el despliegue que iba en curso, que es lo que se quiere
+jobs:                                            # Un solo trabajo: no hay build, no se recompila nada
+  republicar:                                    # Toma un artefacto que ya existe y lo vuelve a poner en linea
+    runs-on: ubuntu-latest                       # Computador Linux prestado por GitHub
+    environment:                                 # Mismo entorno que el despliegue normal, para que quede el rastro
+      name: github-pages                         # El entorno se llama github-pages
+      url: ${{ steps.deployment.outputs.page_url }} # Direccion publica ya restablecida
+    steps:                                       # Tres pasos, ninguno compila
+      - run: echo "Rollback solicitado por $ACTOR. Motivo -> $MOTIVO" # Deja el motivo escrito en el log del flujo
+        env:                                     # El texto libre entra por variable, nunca dentro del comando
+          ACTOR: ${{ github.actor }}             # Quien apreto el boton
+          MOTIVO: ${{ inputs.motivo }}           # Lo que escribio esa persona al lanzarlo
+      - uses: actions/download-artifact@v6       # Baja el artefacto guardado de la ejecucion buena
+        with:                                    # Opciones de la descarga
+          name: ${{ inputs.artefacto }}          # Cual artefacto, de los que guardo esa ejecucion
+          run-id: ${{ inputs.ejecucion }}        # De cual ejecucion anterior se toma
+          github-token: ${{ github.token }}      # Permiso para leer artefactos de otra ejecucion
+          path: artefacto                        # Carpeta local donde queda lo descargado
+      - id: deployment                           # Nombre corto del paso para poder leer su URL arriba
+        uses: actions/deploy-pages@v5            # Publica ese mismo paquete, sin recompilar una sola linea
+        with:                                    # Opciones de la publicacion
+          artifact_name: ${{ inputs.artefacto }} # Publica exactamente el artefacto que se descargo
