@@ -62,7 +62,7 @@ Al finalizar el laboratorio podrás:
 Abre una terminal y sitúate en el directorio obligatorio.
 
 ```bash
-cd /workspace/vue-intermedio-labs/projecthub-spa
+cd ../projecthub-spa
 ```
 
 En Windows:

@@ -14,7 +14,7 @@ En este laboratorio se establecerá una línea base reproducible de rendimiento 
 
 Posteriormente se aplicarán optimizaciones de entrega de JavaScript, carga diferida de rutas y activos, memoización de filtros, `v-memo` y virtual scrolling. Finalmente, se repetirá la medición bajo condiciones equivalentes y se documentarán los resultados en `docs/performance-report.md`.
 
-> **Importante:** este laboratorio utiliza el repositorio específico ubicado en `/workspace/vue-intermedio/catalogo-pro`. Aunque el directorio general del curso es `/workspace/vue-intermedio-labs`, para esta práctica debe respetarse la ruta indicada por el alcance del laboratorio.
+> **Importante:** este laboratorio utiliza el repositorio específico ubicado en `../catalogo-pro`. Aunque el directorio general del curso es `..`, para esta práctica debe respetarse la ruta indicada por el alcance del laboratorio.
 
 ## Objetivos de aprendizaje
 
@@ -42,7 +42,7 @@ Al completar el laboratorio, podrá:
 - Repositorio inicial disponible en:
 
   ```text
-  /workspace/vue-intermedio/catalogo-pro
+  ../catalogo-pro
   ```
 
   En Windows 11, use la ruta equivalente configurada por su entorno, por ejemplo:
@@ -88,7 +88,7 @@ Al completar el laboratorio, podrá:
 Abra una terminal y ejecute los siguientes comandos:
 
 ```bash
-cd /workspace/vue-intermedio/catalogo-pro
+cd ../catalogo-pro
 
 git branch --show-current
 node --version

@@ -37,7 +37,7 @@ Al completar este laboratorio, podrás:
 ### Acceso y condiciones técnicas
 
 - Directorio de trabajo obligatorio:
-  - Linux/macOS: `/workspace/vue-intermedio-labs`
+  - Linux/macOS: `..`
   - Windows: `C:\workspace\vue-intermedio-labs`
 - Aplicación existente con nombre fijo: `projecthub-spa`.
 - Rama Git activa: `main`.
@@ -66,7 +66,7 @@ Al completar este laboratorio, podrás:
 3. Comprueba la rama activa y las dependencias.
 
 ```bash
-cd /workspace/vue-intermedio-labs/projecthub-spa
+cd ../projecthub-spa
 git branch --show-current
 node --version
 npm --version

@@ -61,7 +61,7 @@ Debes disponer de:
 El directorio de trabajo obligatorio es:
 
 ```bash
-/workspace/vue-intermedio-labs
+..
 ```
 
 En Windows, utiliza el equivalente:
@@ -78,7 +78,7 @@ C:\workspace\vue-intermedio-labs
 4. Instala las dependencias necesarias si aún no están presentes.
 
 ```bash
-cd /workspace/vue-intermedio-labs/projecthub-spa
+cd ../projecthub-spa
 git branch --show-current
 npm install
 npm install axios@1.8.4 @apollo/client@3.13.8 graphql@16.10.0 msw@2.7.3
@@ -1209,7 +1209,7 @@ watch(
             type="checkbox"
             disabled
           >
-          {{ task.title }} — prioridad: {{ task.priority }}
+          {{ task.title }} - prioridad: {{ task.priority }}
         </li>
       </ul>
     </template>

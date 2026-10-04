@@ -37,7 +37,7 @@ Al completar el laboratorio, podrá:
 
 | Recurso | Requisito |
 |---|---|
-| Directorio de trabajo | `/workspace/vue-intermedio-labs` |
+| Directorio de trabajo | `..` |
 | Equivalente en Windows | `C:\workspace\vue-intermedio-labs` |
 | Aplicación | `projecthub-spa` |
 | Node.js | 22.14.0 |
@@ -56,7 +56,7 @@ Al completar el laboratorio, podrá:
 1. Abra una terminal y acceda al directorio obligatorio:
 
    ```bash
-   cd /workspace/vue-intermedio-labs/projecthub-spa
+   cd ../projecthub-spa
    ```
 
    En Windows PowerShell:
@@ -851,7 +851,7 @@ Después de cargar un proyecto, inspeccione `tasksStore` en Vue DevTools. Debe o
 
        <ul v-else>
          <li v-for="project in filteredProjects" :key="project.id">
-           {{ project.name }} — {{ project.status }}
+           {{ project.name }} - {{ project.status }}
          </li>
        </ul>
      </section>

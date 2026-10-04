@@ -61,3 +61,29 @@ Consolidar y aplicar conceptos intermedios y avanzados de Vue.js, abarcando reac
 - Trabajar en `changes_course`.
 - Crear Pull Request hacia `main`.
 - Merge por `Squash and merge`.
+
+
+## Estructura de Proyectos Base del Curso
+
+El repositorio contiene tres proyectos base funcionales organizados por dominio técnico:
+
+1. **`projecthub-spa/`** (Capítulos 1 al 5):
+   - SPA de gestión de proyectos y tareas.
+   - Implementa optimización reactiva con `shallowRef` y `computed`.
+   - Lógica extraída en composables reutilizables (`useProjects`, `useTaskFilters`).
+   - Autenticación simulada con Mock Service Worker (MSW) y guards de Vue Router.
+   - Gestión de estado con 5 stores modulares en Pinia.
+   - Clientes HTTP con Axios e interceptores y cliente Apollo GraphQL con caché normalizada.
+
+2. **`catalogo-pro/`** (Capítulos 6 y 7):
+   - Catálogo interactivo de 2.000 productos con renderizado virtual (virtual scrolling).
+   - Configuración de empaquetado optimizado con `manualChunks` en Vite.
+   - Suites de pruebas unitarias en Vitest con jsdom y Vue Test Utils.
+   - Pruebas de integración y End-to-End (E2E) con Cypress headless.
+
+3. **`monorepo/`** (Capítulo 8):
+   - Estructura monorrepositorio gestionada con `pnpm workspaces`.
+   - Separación en `apps/web` y paquete compartido `packages/ui-components`.
+   - Empaquetado en contenedor Docker con build multi-stage y servidor web Nginx Alpine.
+   - Servidor Nginx configurado con `try_files` para soporte de rutas HTML5.
+   - Pipeline automatizado de Integración Continua con GitHub Actions.

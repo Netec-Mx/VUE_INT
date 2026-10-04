@@ -38,7 +38,7 @@ Al completar el laboratorio, podrás:
 - Repositorio base disponible en:
 
   ```text
-  /workspace/vue-intermedio-labs
+  ..
   ```
 
   En Windows:
@@ -47,7 +47,7 @@ Al completar el laboratorio, podrás:
   C:\workspace\vue-intermedio-labs
   ```
 
-- Dependencias instaladas previamente con `npm ci`.
+- Dependencias instaladas previamente con `npm install`.
 - Extensión Vue Devtools 7.7.2 instalada en Google Chrome.
 - Acceso local al puerto `5173`.
 
@@ -80,7 +80,7 @@ Al completar el laboratorio, podrás:
 1. Abre una terminal en el directorio obligatorio:
 
    ```bash
-   cd /workspace/vue-intermedio-labs
+   cd ..
    ```
 
    En Windows PowerShell:
@@ -99,7 +99,7 @@ Al completar el laboratorio, podrás:
 3. Instala dependencias únicamente si no se instalaron antes:
 
    ```bash
-   npm ci
+   npm install
    ```
 
 4. Inicia el servidor Vite en el puerto fijo del curso:

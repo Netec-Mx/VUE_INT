@@ -45,7 +45,7 @@ Debes contar con:
 - Acceso de lectura y escritura al directorio obligatorio:
 
 ```bash
-/workspace/vue-intermedio-labs/projecthub-spa
+../projecthub-spa
 ```
 
 En Windows, utiliza el equivalente:
@@ -90,7 +90,7 @@ C:\workspace\vue-intermedio-labs\projecthub-spa
 1. Abre una terminal y entra al proyecto.
 
 ```bash
-cd /workspace/vue-intermedio-labs/projecthub-spa
+cd ../projecthub-spa
 ```
 
 2. Confirma que trabajas en la única rama permitida.

@@ -1,0 +1,33 @@
+name: Validar y Desplegar Aplicación Vue
+
+on:
+  push:
+    branches: [ changes_course, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar y Probar ProjectHub SPA
+        run: |
+          cd projecthub-spa
+          npm install
+          npm run build
+          npm test
+
+      - name: Instalar y Probar Catalogo Pro
+        run: |
+          cd catalogo-pro
+          npm install
+          npm run build
+          npm run test:unit

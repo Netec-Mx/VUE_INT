@@ -78,7 +78,7 @@ Al completar este laboratorio podrás:
 El repositorio final del laboratorio se ubicará en:
 
 ```text
-/workspace/vue-intermedio/catalogo-platform
+../catalogo-platform
 ```
 
 En Windows, usa el equivalente:
@@ -117,8 +117,8 @@ La salida de `pnpm --version` debe indicar:
 1. Crea el directorio de destino y entra en él:
 
    ```bash
-   mkdir -p /workspace/vue-intermedio/catalogo-platform
-   cd /workspace/vue-intermedio/catalogo-platform
+   mkdir -p ../catalogo-platform
+   cd ../catalogo-platform
    ```
 
 2. Inicializa el repositorio Git solamente si aún no existe:
@@ -136,7 +136,7 @@ La salida de `pnpm --version` debe indicar:
 4. Copia la aplicación validada del laboratorio anterior. Ajusta la ruta de origen si tu repositorio anterior tiene otra ubicación:
 
    ```bash
-   cp -R /workspace/vue-intermedio-labs/projecthub-spa apps/web
+   cp -R ../projecthub-spa apps/web
    ```
 
    Si el proyecto anterior se llama de otra forma, copia su contenido a `apps/web`.
@@ -804,7 +804,7 @@ Debes observar una lista de eventos con `timestamp`, `version`, `type` y `payloa
    ```dockerfile
    FROM node:22.14.0-alpine AS build
 
-   WORKDIR /workspace
+   WORKDIR ..
 
    ARG APP_VERSION=development
    ARG GIT_SHA=unknown
@@ -835,7 +835,7 @@ Debes observar una lista de eventos con `timestamp`, `version`, `type` y `payloa
    LABEL org.opencontainers.image.revision="${GIT_SHA}"
 
    COPY nginx.conf /etc/nginx/conf.d/default.conf
-   COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
+   COPY --from=build ../apps/web/dist /usr/share/nginx/html
 
    EXPOSE 80
 
@@ -1373,7 +1373,7 @@ curl -I http://127.0.0.1:8080/catalogo
 
 ### Lista de comprobación final
 
-- [ ] El repositorio está ubicado en `/workspace/vue-intermedio/catalogo-platform`.
+- [ ] El repositorio está ubicado en `../catalogo-platform`.
 - [ ] Existe `pnpm-workspace.yaml` con `apps/*` y `packages/*`.
 - [ ] La SPA reside en `apps/web`.
 - [ ] Existe el paquete `@catalogo/ui` con API pública en `src/index.ts`.
