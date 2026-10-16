@@ -1,6 +1,4 @@
-# 4 Practica: diagnóstico y optimización de renders en una SPA
-
-## Metadatos
+# Práctica 1.4: diagnóstico y optimización de dibujos en una SPA
 
 | Campo | Valor |
 |---|---|
@@ -8,1160 +6,253 @@
 | Complejidad | Media |
 | Nivel de Bloom | Aplicar |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio diagnosticarás renders innecesarios en la SPA **ProjectHub** y aplicarás optimizaciones basadas en el modelo de reactividad de Vue 3. Instrumentarás componentes con contadores de render y marcas de rendimiento, observarás actualizaciones mediante Vue Devtools y Chrome DevTools, y separarás el estado local del estado compartido.
+Vas a medir una SPA (aplicación de una sola página) que trabaja de más y a mejorarla con tres herramientas de Vue: `computed`, props (los datos que un componente padre le pasa a un hijo) y `shallowRef`. Es un catálogo de 12 productos con un panel que cuenta cuántas veces Vue vuelve a dibujar cada parte. Al marcar un producto como favorito, hoy se redibujan las 12 tarjetas; al terminar, solo se redibuja 1. No se trata de que "se sienta" más rápida: vas a ver el número antes y después.
 
-El resultado será una estructura modular con `computed`, `shallowRef`, `v-memo` y un módulo temporal de estado compartido en `src/state/projectHubState.js`. Esta estructura se conservará como punto de partida para los laboratorios posteriores de composables y Pinia.
+![Resultado final: catálogo con el panel de medición](imagenes/lab01-final.png)
 
-## Objetivos de aprendizaje
+## Objetivos
 
-Al completar el laboratorio, podrás:
+Al terminar podrás:
 
-- [ ] Identificar qué cambios reactivos provocan renders en componentes relacionados y no relacionados.
-- [ ] Explicar la diferencia práctica entre `ref`, `reactive`, `computed`, `watch`, `watchEffect` y `shallowRef`.
-- [ ] Separar el estado local de filtros del estado compartido de proyectos, tareas, selección y tema.
-- [ ] Reemplazar cálculos repetidos en plantilla por propiedades `computed`.
-- [ ] Aplicar `shallowRef` y `v-memo` para reducir trabajo de renderizado en una lista filtrable.
+- Identificar, con números, qué cambio provoca dibujos innecesarios.
+- Reemplazar un cálculo repetido en la plantilla por un `computed`.
+- Pasar a un componente solo lo que necesita por props, para que no se redibuje cuando cambia lo demás.
+- Usar `shallowRef` en una lista grande y agregar elementos sin que la pantalla se quede quieta.
 
-## Prerrequisitos
+## Antes de empezar
 
-### Conocimientos requeridos
+- **Node.js 20 o superior** (el programa que ejecuta JavaScript fuera del navegador). Compruébalo con `node -v`.
+- Google Chrome y un editor de código, como Visual Studio Code. Si VS Code ofrece instalar la extensión **Vue (Official)**, acéptala: colorea el código de los archivos `.vue`.
+- El repositorio del curso descargado en tu equipo.
+- Opcional: la extensión **Vue Devtools** en Chrome, para ver el árbol de componentes.
 
-- JavaScript moderno: módulos ES, funciones flecha, destructuring y promesas.
-- Vue 3: componentes, props, eventos, `ref`, `reactive`, `computed` y ciclo de vida.
-- Fundamentos de reactividad de Vue: proxys, seguimiento de dependencias y efectos de renderizado.
-- Uso básico de Chrome DevTools y consola del navegador.
+## Preparación (4 minutos)
 
-### Acceso requerido
-
-- Repositorio base disponible en:
-
-  ```text
-  ..
-  ```
-
-  En Windows:
-
-  ```text
-  C:\workspace\vue-intermedio-labs
-  ```
-
-- Dependencias instaladas previamente con `npm install`.
-- Extensión Vue Devtools 7.7.2 instalada en Google Chrome.
-- Acceso local al puerto `5173`.
-
-## Entorno del laboratorio
-
-### Hardware recomendado
-
-| Recurso | Mínimo |
-|---|---|
-| CPU | 2 núcleos, 2.0 GHz |
-| Memoria RAM | 8 GB |
-| Espacio libre | 5 GB |
-| Resolución | 1366x768 |
-| Red | Internet durante la instalación inicial |
-
-### Software
-
-| Herramienta | Versión de referencia |
-|---|---|
-| Node.js | 22.14.0 |
-| npm | 10.9.2 |
-| Vue | 3.5.13 |
-| Vite | 6.1.0 |
-| Google Chrome | 133.0.6943.98 o superior |
-| Vue Devtools | 7.7.2 |
-| Sistema operativo | Windows 11, macOS 14 o Ubuntu 24.04 |
-
-### Preparación inicial
-
-1. Abre una terminal en el directorio obligatorio:
+1. Abre una terminal **en la carpeta donde descargaste el repositorio** y entra a la carpeta del laboratorio. El comando es igual en Windows, macOS y Linux:
 
    ```bash
-   cd ..
+   cd Capitulo01/laboratorio
    ```
 
-   En Windows PowerShell:
-
-   ```powershell
-   cd C:\workspace\vue-intermedio-labs
-   ```
-
-2. Comprueba la rama y el estado del repositorio. El curso utiliza una única rama de trabajo llamada `main`.
-
-   ```bash
-   git branch --show-current
-   git status
-   ```
-
-3. Instala dependencias únicamente si no se instalaron antes:
+2. Instala las dependencias (las librerías que el proyecto necesita). Tarda uno o dos minutos la primera vez:
 
    ```bash
    npm install
    ```
 
-4. Inicia el servidor Vite en el puerto fijo del curso:
+3. Arranca el servidor de desarrollo:
 
    ```bash
-   npm run dev -- --host 127.0.0.1 --port 5173
+   npm run dev
    ```
 
-5. Abre la aplicación en Chrome:
+4. Abre `http://127.0.0.1:5173` en Chrome.
 
-   ```text
-   http://127.0.0.1:5173
-   ```
+**Qué debes ver:** el catálogo con 12 tarjetas y, a la derecha, el panel **Medición** con sus tres contadores.
 
-> No inicies servicios en el puerto `3000`. Este laboratorio no requiere API local; los futuros laboratorios utilizarán MSW para interceptar solicitudes.
+![Catálogo al abrirlo por primera vez](imagenes/lab01-preparacion.png)
 
----
+Los archivos que vas a tocar están en `src/`: `App.vue` y los dos de `src/components/`: `ListaProductos.vue` y `TarjetaProducto.vue`. El panel de medición (`PanelMedicion.vue` y `medicion.js`) ya está hecho y no se modifica.
 
-## Desarrollo paso a paso
+## Paso 1. Medir el problema (4 minutos)
 
-### Paso 1. Inspeccionar el estado inicial y preparar el diagnóstico
+**Qué vas a hacer y por qué:** antes de optimizar hay que medir. Si no tienes el número de antes, no puedes demostrar la mejora.
 
-**Objetivo:** confirmar que la SPA ProjectHub está disponible e identificar los componentes que participan en la pantalla.
+**Primero, predice:** si marcas como favorito un solo producto, ¿cuántas tarjetas crees que se vuelven a dibujar? Anótalo.
 
-**Instrucciones:**
+1. Pulsa **Reiniciar contadores**.
+2. Pulsa la estrella ☆ de **Teclado**.
+3. Anota los tres números del panel en la columna "Antes" de esta tabla:
 
-1. Con el servidor Vite en ejecución, abre `http://127.0.0.1:5173`.
+| Medición tras marcar un favorito | Antes | Después |
+|---|---|---|
+| Dibujos de tarjetas | | |
+| Dibujos de la lista | | |
+| Cálculos del filtro | | |
 
-2. Identifica las tres zonas funcionales de la SPA:
+**Qué debes ver:** Dibujos de tarjetas **12**, Dibujos de la lista **1**, Cálculos del filtro **1**.
 
-   - Panel de proyectos.
-   - Listado de tareas filtrable.
-   - Panel de preferencias visuales.
+![Medición antes de optimizar: 12 dibujos de tarjetas](imagenes/lab01-paso1-antes.png)
 
-3. Abre Chrome DevTools con `F12` o `Ctrl+Shift+I`.
+**Por qué pasa:** abre `src/components/TarjetaProducto.vue`. Cada tarjeta recibe con `inject` (la función que recibe lo que `App.vue` comparte con `provide`) la lista **completa** de favoritos y la recorre con `includes`. Vue anota que todas las tarjetas leyeron esa lista; cuando cambia, las redibuja a todas, aunque solo una cambió de estrella.
 
-4. En la pestaña **Console**, ejecuta:
+## Paso 2. Guardar el filtro con computed (4 minutos)
+
+**Qué vas a hacer y por qué:** la lista llama a la función `filtrar()` en la plantilla, así que la vuelve a ejecutar cada vez que se dibuja, aunque la búsqueda no haya cambiado. Un `computed` guarda el resultado y solo lo recalcula cuando cambia algo que usa.
+
+**Dónde:** `src/components/ListaProductos.vue`.
+
+1. En la línea del `import`, agrega `computed`:
 
    ```js
-   performance.clearMarks()
-   console.clear()
+   import { inject, computed, onUpdated } from 'vue'   // computed guarda un resultado y lo recalcula solo si cambia lo que usa
    ```
 
-5. Abre Vue Devtools desde las herramientas de desarrollo de Chrome.
-
-6. En Vue Devtools, localiza el árbol de componentes. Deberías reconocer componentes equivalentes a:
-
-   ```text
-   App
-   ├── ProjectPanel
-   ├── TaskList
-   └── PreferencesPanel
-   ```
-
-7. Si el repositorio inicial tiene una estructura diferente, identifica los componentes que cumplen esas mismas responsabilidades antes de continuar.
-
-**Salida esperada:**
-
-- La aplicación ProjectHub carga en el navegador.
-- Vue Devtools reconoce la aplicación Vue.
-- La consola está limpia y lista para registrar actividad de renderizado.
-
-**Verificación:**
-
-En Vue Devtools, selecciona el componente raíz. Comprueba que el estado visible de la aplicación incluye, como mínimo, información de tareas, selección, filtros o preferencias.
-
----
-
-### Paso 2. Instrumentar renders con contadores y marcas de rendimiento
-
-**Objetivo:** registrar cuándo Vue vuelve a renderizar cada componente sin introducir estado reactivo adicional durante el render.
-
-**Instrucciones:**
-
-1. Crea el directorio de utilidades si todavía no existe:
-
-   ```bash
-   mkdir -p src/utils
-   ```
-
-2. Crea el archivo `src/utils/renderProbe.js` con el siguiente contenido:
+2. Cambia la función por un `computed`. Solo cambian la primera y la última línea:
 
    ```js
-   const renderCounts = new Map()
-
-   export function probeRender(componentName) {
-     const currentCount = (renderCounts.get(componentName) ?? 0) + 1
-     renderCounts.set(componentName, currentCount)
-
-     const markName = `render:${componentName}:${currentCount}`
-
-     performance.mark(markName)
-     console.count(`[render] ${componentName}`)
-
-     return ''
-   }
-
-   export function getRenderCount(componentName) {
-     return renderCounts.get(componentName) ?? 0
-   }
-
-   export function resetRenderProbes() {
-     renderCounts.clear()
-     performance.clearMarks()
-   }
+   const filtrados = computed(() => {                   // antes: function filtrar() {
+     contar('filtro')                                   // cuenta cada vez que se calcula el filtro
+     const texto = consulta.value.trim().toLowerCase()  // trim quita espacios; toLowerCase pasa a minúsculas
+     if (!texto) return productos.value                 // sin texto: todos los productos
+     return productos.value.filter((p) => p.nombre.toLowerCase().includes(texto))
+   })                                                   // antes: }
    ```
 
-3. Añade la instrumentación temporal a los componentes iniciales de ProjectHub. En cada componente, importa `probeRender`:
+3. En la plantilla, reemplaza el comentario y la línea del `<li>` por estas dos. `filtrados` va sin paréntesis, porque un `computed` se lee como un dato:
 
-   ```js
-   import { probeRender } from '../utils/renderProbe'
+   ```html
+   <!-- filtrados es un computed: si la consulta no cambió, Vue reutiliza el resultado guardado -->
+   <li v-for="producto in filtrados" :key="producto.id">
    ```
 
-   Ajusta la ruta relativa si el componente se encuentra en otra carpeta.
+4. Guarda. La página se actualiza sola. Pulsa **Reiniciar contadores** y marca otra estrella.
 
-4. Expón la función en el `<script setup>`. Con `<script setup>`, una función importada queda disponible directamente en la plantilla.
+**Qué debes ver:** Cálculos del filtro **0**. Las tarjetas siguen en **12**: eso se arregla en el paso 3.
 
-5. Dentro de la plantilla de cada componente, agrega una interpolación invisible. Por ejemplo, en `ProjectPanel.vue`:
+## Paso 3. Darle a cada tarjeta solo lo que necesita (6 minutos)
 
-   ```vue
-   <span class="sr-only">{{ probeRender('ProjectPanel') }}</span>
-   ```
+**Qué vas a hacer y por qué:** si la tarjeta recibe por prop un simple `true` o `false` ("¿soy favorito?"), Vue solo la redibuja cuando ese valor cambia. Ya no lee la lista completa, así que las demás tarjetas se quedan quietas.
 
-   En `TaskList.vue`:
+**Dónde:** primero `src/components/TarjetaProducto.vue` y luego `src/components/ListaProductos.vue`.
 
-   ```vue
-   <span class="sr-only">{{ probeRender('TaskList') }}</span>
-   ```
+1. En `TarjetaProducto.vue`, reemplaza todo el bloque `<script setup>` por este:
 
-   En `PreferencesPanel.vue`:
-
-   ```vue
-   <span class="sr-only">{{ probeRender('PreferencesPanel') }}</span>
-   ```
-
-6. Si el proyecto no dispone de una clase visual para ocultar contenido, añade esta regla a `src/style.css`:
-
-   ```css
-   .sr-only {
-     position: absolute;
-     width: 1px;
-     height: 1px;
-     padding: 0;
-     margin: -1px;
-     overflow: hidden;
-     clip: rect(0, 0, 0, 0);
-     white-space: nowrap;
-     border: 0;
-   }
-   ```
-
-7. Guarda los archivos y vuelve al navegador. Vite aplicará actualización en caliente.
-
-8. En la consola, realiza interacciones aisladas:
-
-   - Cambia el filtro de tareas.
-   - Selecciona una tarea.
-   - Cambia el tema visual.
-   - Vuelve a cambiar solo una de esas variables.
-
-**Salida esperada:**
-
-La consola muestra mensajes similares a:
-
-```text
-[render] ProjectPanel: 1
-[render] TaskList: 1
-[render] PreferencesPanel: 1
-```
-
-Después de una interacción, puede aumentar el contador de más componentes de los esperados en la implementación inicial.
-
-**Verificación:**
-
-Ejecuta en la consola:
-
-```js
-performance.getEntriesByType('mark')
-  .map((entry) => entry.name)
-  .filter((name) => name.startsWith('render:'))
-```
-
-Comprueba que existen marcas con nombres como:
-
-```text
-render:TaskList:2
-render:PreferencesPanel:2
-```
-
-> La función `probeRender()` usa un `Map` normal, no reactivo. Es importante: actualizar un `ref` o un `reactive` desde una plantilla para contar renders crearía nuevas dependencias y podría alterar el diagnóstico.
-
----
-
-### Paso 3. Diagnosticar dependencias reactivas no deseadas
-
-**Objetivo:** relacionar los renders observados con el grafo de dependencias reactivas de Vue.
-
-**Instrucciones:**
-
-1. Antes de cada prueba, limpia las marcas y la consola:
-
-   ```js
-   performance.clearMarks()
-   console.clear()
-   ```
-
-2. Realiza la primera prueba: modifica solo el texto de filtro de tareas.
-
-3. Observa qué componentes registran un nuevo `[render]`.
-
-4. Realiza la segunda prueba: cambia solo el tema desde preferencias.
-
-5. Realiza la tercera prueba: selecciona una sola tarea.
-
-6. Registra tus resultados en esta tabla:
-
-   | Cambio realizado | Componentes que renderizan en la versión inicial | ¿Es necesario? |
-   |---|---|---|
-   | Cambiar filtro |  |  |
-   | Cambiar tema |  |  |
-   | Seleccionar tarea |  |  |
-
-7. En Vue Devtools, selecciona `TaskList` y revisa las propiedades y el estado expuesto. Busca patrones como los siguientes:
-
-   ```js
-   const ui = reactive({
-     filter: '',
-     theme: 'light',
-     selectedTaskId: 'task-1'
-   })
-   ```
-
-   o un objeto grande que se pase completo mediante props:
-
-   ```vue
-   <TaskList :ui="ui" :tasks="tasks" />
-   <ProjectPanel :ui="ui" :projects="projects" />
-   <PreferencesPanel :ui="ui" />
-   ```
-
-8. Explica por qué ese patrón amplía las dependencias de renderizado. Aunque un componente solo necesite una propiedad, recibir, leer o derivar datos desde un objeto compartido grande puede mezclar responsabilidades y dificultar el diagnóstico.
-
-9. Usa la siguiente tabla como referencia para interpretar el comportamiento:
-
-   | API | Tipo de seguimiento | Uso apropiado en este laboratorio |
-   |---|---|---|
-   | `ref()` | Sigue cambios de un valor mediante `.value` | Tema, filtro, identificador de tarea seleccionada |
-   | `reactive()` | Proxy profundo para propiedades de un objeto | Objetos pequeños y cohesivos modificados por propiedad |
-   | `computed()` | Efecto derivado con caché hasta que cambian sus dependencias | Lista filtrada, contadores y tarea seleccionada |
-   | `watch()` | Reacciona explícitamente a una fuente concreta | Sincronizar el tema con `document.documentElement` |
-   | `watchEffect()` | Descubre automáticamente las dependencias leídas en su efecto | Diagnóstico o efectos simples; usar con cuidado |
-   | `shallowRef()` | Sigue el reemplazo de `.value`, no mutaciones internas profundas | Colecciones externas o inmutables de proyectos y tareas |
-
-10. Recuerda la relación con los fundamentos de reactividad:
-
-    - Un `reactive()` crea un `Proxy`.
-    - Una lectura durante el render registra una dependencia.
-    - Una escritura notifica a los efectos dependientes.
-    - El render del componente es uno de esos efectos.
-    - Reducir las lecturas reactivas de un componente reduce su superficie de actualización.
-
-**Salida esperada:**
-
-La versión inicial muestra al menos una actualización innecesaria: por ejemplo, cambiar el tema puede volver a renderizar el listado de tareas, o cambiar el filtro puede actualizar una zona que no depende funcionalmente del filtro.
-
-**Verificación:**
-
-Responde estas preguntas antes de continuar:
-
-1. ¿Qué dato reactivo cambia al escribir en el filtro?
-2. ¿Qué componente debería depender de ese dato?
-3. ¿Por qué el panel de proyectos no necesita conocer el filtro?
-4. ¿Por qué una selección de tarea no debe obligar a renderizar las filas no seleccionadas?
-
----
-
-### Paso 4. Crear el módulo de estado compartido inicial
-
-**Objetivo:** centralizar únicamente el estado que realmente se comparte y preparar una frontera clara para futuros composables y stores de Pinia.
-
-**Instrucciones:**
-
-1. Crea el directorio de estado:
-
-   ```bash
-   mkdir -p src/state
-   ```
-
-2. Crea el archivo `src/state/projectHubState.js`:
-
-   ```js
-   import { computed, ref, shallowRef, watch } from 'vue'
-
-   const initialProjects = Object.freeze([
-     Object.freeze({
-       id: 'project-alpha',
-       name: 'Portal de clientes',
-       owner: 'Ana Torres',
-       status: 'En curso'
-     }),
-     Object.freeze({
-       id: 'project-beta',
-       name: 'Automatización QA',
-       owner: 'Luis Mora',
-       status: 'Planificación'
-     })
-   ])
-
-   const initialTasks = Object.freeze([
-     Object.freeze({
-       id: 'task-1',
-       projectId: 'project-alpha',
-       title: 'Diseñar panel de métricas',
-       status: 'Pendiente',
-       priority: 'Alta'
-     }),
-     Object.freeze({
-       id: 'task-2',
-       projectId: 'project-alpha',
-       title: 'Revisar accesibilidad',
-       status: 'En curso',
-       priority: 'Media'
-     }),
-     Object.freeze({
-       id: 'task-3',
-       projectId: 'project-beta',
-       title: 'Definir casos E2E',
-       status: 'Pendiente',
-       priority: 'Alta'
-     }),
-     Object.freeze({
-       id: 'task-4',
-       projectId: 'project-beta',
-       title: 'Preparar pipeline CI',
-       status: 'Completada',
-       priority: 'Media'
-     })
-   ])
-
-   // Las colecciones se reemplazan como unidades inmutables.
-   // Vue no convierte profundamente cada tarea o proyecto en un proxy.
-   export const projects = shallowRef(initialProjects)
-   export const tasks = shallowRef(initialTasks)
-
-   // Estado realmente compartido entre zonas de la interfaz.
-   export const selectedTaskId = ref('task-1')
-   export const theme = ref('light')
-
-   export const selectedTask = computed(() => {
-     return tasks.value.find((task) => task.id === selectedTaskId.value) ?? null
-   })
-
-   export const totalCompletedTasks = computed(() => {
-     return tasks.value.filter((task) => task.status === 'Completada').length
-   })
-
-   export function selectTask(taskId) {
-     selectedTaskId.value = taskId
-   }
-
-   export function toggleTaskStatus(taskId) {
-     tasks.value = tasks.value.map((task) => {
-       if (task.id !== taskId) return task
-
-       return Object.freeze({
-         ...task,
-         status: task.status === 'Completada' ? 'Pendiente' : 'Completada'
-       })
-     })
-   }
-
-   export function setTheme(nextTheme) {
-     theme.value = nextTheme
-   }
-
-   // watch es apropiado porque la fuente y el efecto están explícitamente definidos.
-   watch(
-     theme,
-     (nextTheme) => {
-       document.documentElement.dataset.theme = nextTheme
-     },
-     { immediate: true }
-   )
-   ```
-
-3. Analiza por qué `projects` y `tasks` usan `shallowRef`:
-
-   - La colección es un conjunto de datos tratado como inmutable.
-   - No se necesita observar cada propiedad interna de cada tarea.
-   - Las actualizaciones reemplazan el arreglo completo.
-   - Vue solo debe reaccionar a `tasks.value = nuevoArreglo`.
-
-4. Analiza esta diferencia importante:
-
-   ```js
-   // No desencadena actualización con shallowRef:
-   tasks.value[0].status = 'Completada'
-
-   // Sí desencadena actualización:
-   tasks.value = tasks.value.map((task) => ({
-     ...task,
-     status: task.id === 'task-1' ? 'Completada' : task.status
-   }))
-   ```
-
-5. No desestructures directamente propiedades de un objeto `reactive()` si necesitas preservar su conexión reactiva. En este laboratorio se exportan `ref`, `shallowRef` y `computed` individuales, evitando ese problema.
-
-**Salida esperada:**
-
-Existe un módulo `src/state/projectHubState.js` que expone estado compartido, selectores derivados y acciones de modificación controladas.
-
-**Verificación:**
-
-Comprueba que el archivo contiene estas exportaciones:
-
-```js
-projects
-tasks
-selectedTaskId
-theme
-selectedTask
-totalCompletedTasks
-selectTask
-toggleTaskStatus
-setTheme
-```
-
----
-
-### Paso 5. Separar responsabilidades en componentes optimizados
-
-**Objetivo:** evitar que filtros locales, selección y preferencias visuales se propaguen como un único objeto reactivo amplio.
-
-**Instrucciones:**
-
-1. Crea el directorio de componentes:
-
-   ```bash
-   mkdir -p src/components
-   ```
-
-2. Crea o reemplaza `src/components/ProjectPanel.vue`:
-
-   ```vue
+   ```html
    <script setup>
-   import { computed } from 'vue'
-   import { projects, totalCompletedTasks } from '../state/projectHubState'
-   import { probeRender } from '../utils/renderProbe'
+   import { onUpdated } from 'vue'                      // función que avisa después de cada redibujo
+   import { contar } from '../medicion.js'              // contadores del panel
 
-   const activeProjects = computed(() => {
-     return projects.value.filter((project) => project.status === 'En curso').length
+   const props = defineProps({                         // declara los datos que la tarjeta recibe de la lista
+     producto: Object,                                  // el producto que se muestra
+     favorito: Boolean                                  // true si este producto está marcado
    })
+   const emit = defineEmits(['alternar'])               // aviso que la tarjeta le manda a la lista
+
+   onUpdated(() => contar('tarjetas'))                  // cuenta cada vez que esta tarjeta se redibuja
    </script>
-
-   <template>
-     <section class="panel">
-       <span class="sr-only">{{ probeRender('ProjectPanel') }}</span>
-
-       <h2>Proyectos</h2>
-       <p class="summary">
-         {{ activeProjects }} activos · {{ totalCompletedTasks }} tareas completadas
-       </p>
-
-       <ul class="project-list">
-         <li v-for="project in projects" :key="project.id">
-           <strong>{{ project.name }}</strong>
-           <span>{{ project.owner }} · {{ project.status }}</span>
-         </li>
-       </ul>
-     </section>
-   </template>
    ```
 
-3. Crea o reemplaza `src/components/TaskList.vue`:
+2. En la plantilla de la misma tarjeta, reemplaza el `<button>` por este. Cambia `esFavorito()` por `favorito` y el clic ahora le avisa a la lista:
 
-   ```vue
-   <script setup>
-   import { computed, ref } from 'vue'
-   import {
-     selectedTaskId,
-     selectTask,
-     tasks,
-     toggleTaskStatus
-   } from '../state/projectHubState'
-   import { probeRender } from '../utils/renderProbe'
-
-   // El filtro pertenece solamente a este componente.
-   const filterText = ref('')
-
-   // computed evita ejecutar filter() repetidamente en cada interpolación.
-   const filteredTasks = computed(() => {
-     const normalizedFilter = filterText.value.trim().toLocaleLowerCase()
-
-     if (!normalizedFilter) return tasks.value
-
-     return tasks.value.filter((task) => {
-       return task.title.toLocaleLowerCase().includes(normalizedFilter)
-     })
-   })
-
-   const pendingTasks = computed(() => {
-     return filteredTasks.value.filter((task) => task.status !== 'Completada').length
-   })
-   </script>
-
-   <template>
-     <section class="panel">
-       <span class="sr-only">{{ probeRender('TaskList') }}</span>
-
-       <div class="panel-header">
-         <div>
-           <h2>Tareas</h2>
-           <p class="summary">{{ pendingTasks }} pendientes visibles</p>
-         </div>
-
-         <label>
-           Filtrar
-           <input
-             v-model="filterText"
-             type="search"
-             placeholder="Buscar tarea"
-           >
-         </label>
-       </div>
-
-       <ul class="task-list">
-         <li
-           v-for="task in filteredTasks"
-           :key="task.id"
-           v-memo="[task.id === selectedTaskId, task.status]"
-           :class="{ selected: task.id === selectedTaskId }"
-         >
-           <button class="task-main" type="button" @click="selectTask(task.id)">
-             <strong>{{ task.title }}</strong>
-             <span>{{ task.priority }} · {{ task.status }}</span>
-           </button>
-
-           <button
-             class="task-action"
-             type="button"
-             @click.stop="toggleTaskStatus(task.id)"
-           >
-             {{ task.status === 'Completada' ? 'Reabrir' : 'Completar' }}
-           </button>
-         </li>
-       </ul>
-
-       <p v-if="filteredTasks.length === 0" class="empty-state">
-         No hay tareas que coincidan con el filtro.
-       </p>
-     </section>
-   </template>
+   ```html
+   <button
+     type="button"
+     class="estrella"
+     :aria-pressed="favorito"
+     :aria-label="(favorito ? 'Quitar de favoritos: ' : 'Marcar como favorito: ') + producto.nombre"
+     @click="emit('alternar', producto.id)"
+   >{{ favorito ? '★' : '☆' }}</button>
    ```
 
-4. Crea o reemplaza `src/components/PreferencesPanel.vue`:
+   `aria-pressed` y `aria-label` le dicen al lector de pantalla si la estrella está marcada y de qué producto es.
 
-   ```vue
-   <script setup>
-   import { setTheme, theme } from '../state/projectHubState'
-   import { probeRender } from '../utils/renderProbe'
-   </script>
-
-   <template>
-     <section class="panel">
-       <span class="sr-only">{{ probeRender('PreferencesPanel') }}</span>
-
-       <h2>Preferencias</h2>
-
-       <label>
-         Tema visual
-         <select :value="theme" @change="setTheme($event.target.value)">
-           <option value="light">Claro</option>
-           <option value="dark">Oscuro</option>
-         </select>
-       </label>
-     </section>
-   </template>
-   ```
-
-5. Crea o reemplaza `src/App.vue`:
-
-   ```vue
-   <script setup>
-   import ProjectPanel from './components/ProjectPanel.vue'
-   import TaskList from './components/TaskList.vue'
-   import PreferencesPanel from './components/PreferencesPanel.vue'
-   import { theme } from './state/projectHubState'
-   import { probeRender } from './utils/renderProbe'
-   </script>
-
-   <template>
-     <main class="app-shell" :class="`theme-${theme}`">
-       <span class="sr-only">{{ probeRender('App') }}</span>
-
-       <header class="app-header">
-         <p class="eyebrow">ProjectHub</p>
-         <h1>Panel de trabajo</h1>
-         <p>Diagnóstico de reactividad y optimización de renders.</p>
-       </header>
-
-       <div class="dashboard-grid">
-         <ProjectPanel />
-         <TaskList />
-         <PreferencesPanel />
-       </div>
-     </main>
-   </template>
-   ```
-
-6. Observa las fronteras de estado finales:
-
-   | Dato | Ubicación | Motivo |
-   |---|---|---|
-   | `filterText` | `TaskList.vue` | Solo afecta el listado de tareas |
-   | `projects` | `projectHubState.js` | Datos compartidos y base para futuros stores |
-   | `tasks` | `projectHubState.js` | Datos compartidos entre lista, selección y métricas |
-   | `selectedTaskId` | `projectHubState.js` | Selección potencialmente consumible por otras zonas |
-   | `theme` | `projectHubState.js` | Preferencia visual global |
-   | `filteredTasks` | `TaskList.vue` | Estado derivado local, no debe persistirse ni compartirse |
-
-**Salida esperada:**
-
-La aplicación queda dividida en tres componentes funcionales. El filtro ya no se almacena en un objeto global de interfaz y cada componente consume solamente el estado que necesita.
-
-**Verificación:**
-
-En `TaskList.vue`, confirma que `filterText` no se pasa como prop a `App.vue`, `ProjectPanel.vue` ni `PreferencesPanel.vue`.
-
----
-
-### Paso 6. Aplicar estilos mínimos y comprobar la interfaz
-
-**Objetivo:** asegurar una visualización clara de los estados de selección, tema y lista de tareas.
-
-**Instrucciones:**
-
-1. Reemplaza o complementa `src/style.css` con el siguiente contenido:
-
-   ```css
-   :root {
-     font-family: Inter, system-ui, sans-serif;
-     color: #172033;
-     background: #eef2f8;
-   }
-
-   :root[data-theme='dark'] {
-     color: #e8edf8;
-     background: #121826;
-   }
-
-   * {
-     box-sizing: border-box;
-   }
-
-   body {
-     margin: 0;
-     min-width: 320px;
-   }
-
-   button,
-   input,
-   select {
-     font: inherit;
-   }
-
-   .app-shell {
-     min-height: 100vh;
-     padding: 2rem;
-     background: #eef2f8;
-   }
-
-   .theme-dark {
-     background: #121826;
-     color: #e8edf8;
-   }
-
-   .app-header,
-   .dashboard-grid {
-     max-width: 1100px;
-     margin: 0 auto;
-   }
-
-   .app-header {
-     margin-bottom: 1.5rem;
-   }
-
-   .app-header h1,
-   .panel h2 {
-     margin: 0;
-   }
-
-   .eyebrow,
-   .summary {
-     color: #667085;
-   }
-
-   .theme-dark .summary,
-   .theme-dark .eyebrow {
-     color: #aab6cf;
-   }
-
-   .dashboard-grid {
-     display: grid;
-     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-     gap: 1rem;
-     align-items: start;
-   }
-
-   .panel {
-     padding: 1rem;
-     border: 1px solid #d0d7e5;
-     border-radius: 12px;
-     background: #ffffff;
-     box-shadow: 0 4px 16px rgb(20 31 56 / 8%);
-   }
-
-   .theme-dark .panel {
-     border-color: #32405c;
-     background: #1b2538;
-   }
-
-   .panel-header {
-     display: flex;
-     gap: 1rem;
-     justify-content: space-between;
-     align-items: start;
-   }
-
-   .panel-header label,
-   .panel > label {
-     display: grid;
-     gap: 0.35rem;
-   }
-
-   input,
-   select,
-   button {
-     border: 1px solid #aeb9cc;
-     border-radius: 6px;
-     padding: 0.5rem 0.65rem;
-   }
-
-   .project-list,
-   .task-list {
-     display: grid;
-     gap: 0.65rem;
-     padding: 0;
-     list-style: none;
-   }
-
-   .project-list li,
-   .task-list li {
-     display: flex;
-     gap: 0.75rem;
-     justify-content: space-between;
-     padding: 0.75rem;
-     border: 1px solid #dbe2ef;
-     border-radius: 8px;
-   }
-
-   .project-list span,
-   .task-main span {
-     display: block;
-     margin-top: 0.2rem;
-     color: #667085;
-     font-size: 0.875rem;
-   }
-
-   .task-list li.selected {
-     border-color: #356ae6;
-     box-shadow: 0 0 0 2px rgb(53 106 230 / 16%);
-   }
-
-   .task-main {
-     flex: 1;
-     padding: 0;
-     border: 0;
-     color: inherit;
-     text-align: left;
-     background: transparent;
-     cursor: pointer;
-   }
-
-   .task-action {
-     align-self: center;
-     cursor: pointer;
-   }
-
-   .empty-state {
-     color: #667085;
-   }
-
-   .sr-only {
-     position: absolute;
-     width: 1px;
-     height: 1px;
-     padding: 0;
-     margin: -1px;
-     overflow: hidden;
-     clip: rect(0, 0, 0, 0);
-     white-space: nowrap;
-     border: 0;
-   }
-   ```
-
-2. Guarda todos los archivos.
-
-3. En el navegador, comprueba que puedes:
-
-   - Escribir texto en el filtro.
-   - Seleccionar una tarea.
-   - Completar y reabrir una tarea.
-   - Alternar entre tema claro y oscuro.
-
-**Salida esperada:**
-
-ProjectHub presenta tres paneles funcionales, filas de tarea seleccionables y un cambio visible de tema.
-
-**Verificación:**
-
-Al completar una tarea, el contador de tareas pendientes visibles disminuye cuando corresponda. Esto confirma que `tasks.value` se reemplaza y que los `computed` dependientes se recalculan.
-
----
-
-### Paso 7. Verificar el efecto de `computed`, `shallowRef` y `v-memo`
-
-**Objetivo:** medir el comportamiento optimizado y explicar qué optimización corresponde a cada necesidad.
-
-**Instrucciones:**
-
-1. Abre la consola y limpia las marcas:
+3. En `ListaProductos.vue`, reemplaza la línea `const { productos, consulta, favoritos } = inject('catalogo')` por esta, que toma también `alternarFavorito`:
 
    ```js
-   performance.clearMarks()
-   console.clear()
+   const { productos, consulta, favoritos, alternarFavorito } = inject('catalogo')
    ```
 
-2. Cambia el tema visual de claro a oscuro.
+4. En la plantilla de la lista, reemplaza `<TarjetaProducto :producto="producto" />` por este bloque, que le pasa a cada tarjeta su dato y escucha su aviso:
 
-3. Observa los mensajes de render. En la arquitectura optimizada:
+   ```html
+   <TarjetaProducto
+     :producto="producto"
+     :favorito="favoritos.includes(producto.id)"
+     @alternar="alternarFavorito"
+   />
+   ```
 
-   - `App` puede renderizar porque consume `theme`.
-   - `PreferencesPanel` puede renderizar porque consume `theme`.
-   - `TaskList` no debería necesitar renderizar por el cambio de tema.
-   - `ProjectPanel` no debería necesitar renderizar por el cambio de tema.
+   `:favorito` le entrega a cada tarjeta `true` o `false`; `@alternar` escucha el aviso de la tarjeta y llama a `alternarFavorito` con el id del producto.
 
-4. Limpia nuevamente consola y marcas:
+5. Guarda, pulsa **Reiniciar contadores** y marca una estrella.
+
+**Qué debes ver:** Dibujos de tarjetas **1**. ¿Se parece a lo que predijiste en el paso 1?
+
+![Medición después de optimizar: 1 dibujo de tarjeta](imagenes/lab01-paso3-despues.png)
+
+## Paso 4. shallowRef para la lista grande (4 minutos)
+
+**Qué vas a hacer y por qué:** `ref` vigila cada producto por dentro. Con 12 productos no se nota; con miles, cuesta tiempo y memoria. `shallowRef` vigila solo que la lista completa cambie, que es lo que pasa cuando llega del servidor.
+
+**Dónde:** `src/App.vue`.
+
+1. Reemplaza completas la línea del `import` y la línea de `const productos`. El comentario también cambia, porque ahora Vue ya no vigila cada producto por dentro:
 
    ```js
-   performance.clearMarks()
-   console.clear()
+   import { ref, shallowRef, provide } from 'vue'       // shallowRef vigila solo el cambio de la lista entera
+   const productos = shallowRef([...productosIniciales]) // antes: ref([...productosIniciales])
    ```
 
-5. Escribe un filtro en el campo de tareas.
+2. **Predice:** guarda y pulsa **Agregar producto de prueba**. ¿Aparece la tarjeta nueva?
 
-6. Comprueba que el cambio afecta a `TaskList`, pero no requiere renderizar `PreferencesPanel`.
+3. No aparece: `push` agrega el producto dentro de la misma lista, y `shallowRef` no mira por dentro. En `agregarProducto`, reemplaza la línea `productos.value.push(nuevo)` por esta, que crea una lista nueva:
 
-7. Limpia nuevamente consola y marcas.
+   ```js
+   productos.value = [...productos.value, nuevo]        // los tres puntos copian los anteriores y se suma el nuevo
+   ```
 
-8. Selecciona una tarea diferente.
+4. Guarda y vuelve a pulsar **Agregar producto de prueba**.
 
-9. En la lista, observa que solo la fila antes seleccionada y la nueva fila seleccionada cambian visualmente. `v-memo` permite a Vue reutilizar subárboles de filas cuyas dependencias declaradas no han cambiado.
+**Qué debes ver:** la tarjeta "Producto nuevo 13" al final y el resumen "Favoritos: 0 de 13 productos".
 
-10. Completa una tarea y verifica que:
+Cada vez que guardas `App.vue`, Vite vuelve a crear el catálogo: las estrellas que habías marcado se desmarcan y la lista vuelve a los 12 productos. Es normal. Por eso `App.vue` copia la lista de `datos.js` con `[...productosIniciales]`: así el producto que agregó `push` en la predicción no queda guardado en el archivo de datos y no aparece repetido.
 
-    - Se reemplaza el arreglo almacenado en `tasks`.
-    - Se actualiza la fila afectada.
-    - Se actualizan los `computed` que dependen de `tasks`.
-    - El panel de proyectos puede actualizar su métrica global de tareas completadas, porque esa métrica sí es una dependencia real.
+![La lista con shallowRef y el producto nuevo](imagenes/lab01-paso4-shallowref.png)
 
-11. En la consola, inspecciona las marcas recientes:
+## Paso 5. Cerrar la medición (2 minutos)
 
-    ```js
-    performance.getEntriesByType('mark')
-      .filter((entry) => entry.name.startsWith('render:'))
-      .map((entry) => entry.name)
-    ```
+1. Completa la columna "Después" de la tabla del paso 1.
+2. Compara con tu predicción: ¿cuál de los tres cambios redujo más trabajo?
 
-12. Resume el resultado esperado:
+| Medición tras marcar un favorito | Antes | Después |
+|---|---|---|
+| Dibujos de tarjetas | 12 | 1 |
+| Dibujos de la lista | 1 | 1 |
+| Cálculos del filtro | 1 | 0 |
 
-   | Técnica | Problema que resuelve | Evidencia observable |
-   |---|---|---|
-   | Separación de estado | Dependencias entre zonas no relacionadas | Filtro no actualiza preferencias |
-   | `computed` | Repetir filtros y conteos en cada render | Lista y contador derivan de una fuente clara |
-   | `shallowRef` | Reactividad profunda innecesaria en colecciones inmutables | La actualización ocurre al reemplazar el arreglo |
-   | `v-memo` | Recrear subárboles de filas estables | Las filas no afectadas conservan su subárbol virtual |
-   | `watch` | Sincronizar una fuente concreta con un efecto externo | `data-theme` cambia en `<html>` |
+La lista se sigue dibujando una vez porque muestra el resumen "Favoritos: N de 12 productos", que sí cambió. Ese dibujo es necesario.
 
-**Salida esperada:**
+## Resultado esperado
 
-Los contadores de render demuestran una reducción de actualizaciones en zonas no relacionadas. La funcionalidad de ProjectHub se mantiene.
+- Componentes que se redibujan de más, identificados con números.
+- `shallowRef` aplicado a la lista de productos.
+- Filtro con `computed`, sin cálculos repetidos.
+- Dibujos de las tarjetas: de 12 a 1.
 
-**Verificación:**
+Si te quedaste atascado, compara tus archivos con los de `Capitulo01/laboratorio-solucion`.
 
-En la consola, ejecuta:
+## Problemas frecuentes
 
-```js
-document.documentElement.dataset.theme
-```
-
-El valor debe coincidir con el tema seleccionado, por ejemplo:
-
-```text
-dark
-```
-
-Esto verifica que el `watch(theme, ...)` se ejecuta como efecto secundario controlado.
-
----
-
-## Validación y pruebas
-
-Completa las siguientes pruebas manuales. Reinicia los contadores antes de cada una con:
-
-```js
-performance.clearMarks()
-console.clear()
-```
-
-| Prueba | Acción | Resultado funcional esperado | Resultado de render esperado |
-|---|---|---|---|
-| Filtro local | Escribir `pipeline` | Se muestra “Preparar pipeline CI” | Se actualiza `TaskList`; preferencias no requieren render |
-| Filtro vacío | Borrar el filtro | Se muestran todas las tareas | Se actualiza `TaskList` |
-| Selección | Seleccionar una tarea distinta | La nueva fila queda resaltada | Cambia `TaskList`; filas estables se benefician de `v-memo` |
-| Cambio de estado | Pulsar “Completar” | La tarea cambia a `Completada` | Se actualiza la lista y métricas dependientes |
-| Tema | Seleccionar “Oscuro” | Cambia el estilo global | Se actualizan `App` y preferencias; la lista no depende del tema |
-| Tema inverso | Volver a “Claro” | Se restaura el estilo claro | Mismo patrón de dependencias que en la prueba anterior |
-
-Ejecuta también una validación de compilación:
-
-```bash
-npm run build
-```
-
-El resultado esperado incluye una salida similar a:
-
-```text
-✓ built in ...
-```
-
-Finalmente, revisa los cambios pendientes:
-
-```bash
-git status
-```
-
-Debes ver archivos equivalentes a los siguientes:
-
-```text
-src/App.vue
-src/components/PreferencesPanel.vue
-src/components/ProjectPanel.vue
-src/components/TaskList.vue
-src/state/projectHubState.js
-src/style.css
-src/utils/renderProbe.js
-```
-
----
-
-## Resolución de problemas
-
-### Problema 1: `v-memo` no parece reducir actualizaciones o la lista no refleja un cambio
-
-**Síntoma:** al completar una tarea, la interfaz no cambia, o todas las filas parecen reconstruirse aunque las tareas no hayan cambiado.
-
-**Causa:** con `shallowRef`, Vue solo observa el reemplazo de `tasks.value`. Una mutación profunda como `tasks.value[0].status = 'Completada'` no notifica automáticamente una actualización. Además, `v-memo` solo puede reutilizar una fila si las expresiones de su arreglo de dependencias permanecen iguales.
-
-**Solución:** actualiza la colección de forma inmutable mediante reemplazo, como hace `toggleTaskStatus()`:
-
-```js
-tasks.value = tasks.value.map((task) => {
-  if (task.id !== taskId) return task
-
-  return {
-    ...task,
-    status: 'Completada'
-  }
-})
-```
-
-Mantén una clave estable en el `v-for` y dependencias relevantes en `v-memo`:
-
-```vue
-<li
-  v-for="task in filteredTasks"
-  :key="task.id"
-  v-memo="[task.id === selectedTaskId, task.status]"
->
-```
-
-### Problema 2: Vue Devtools no detecta la aplicación o no aparecen contadores en consola
-
-**Síntoma:** Vue Devtools muestra “No Vue.js app detected”, o no aparecen mensajes `[render] ...` al interactuar con la interfaz.
-
-**Causa:** la aplicación puede haberse abierto en una URL distinta al servidor Vite requerido, la extensión Vue Devtools puede estar deshabilitada, o `probeRender()` no se invocó desde la plantilla del componente.
-
-**Solución:** confirma que estás usando exactamente la URL local del laboratorio:
-
-```text
-http://127.0.0.1:5173
-```
-
-Verifica que el servidor se inició con:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-Después, revisa que cada componente importe la utilidad y contenga una llamada en su plantilla:
-
-```vue
-<span class="sr-only">{{ probeRender('TaskList') }}</span>
-```
-
-Recarga la página sin caché con `Ctrl+Shift+R` o `Cmd+Shift+R` y vuelve a abrir Vue Devtools.
-
----
+| Lo que ves | Por qué pasa | Cómo se arregla |
+|---|---|---|
+| `npm error enoent ... package.json` | La terminal no está en `Capitulo01/laboratorio` | Entra a esa carpeta con `cd` y repite `npm install` |
+| `Port 5173 is already in use` | Otro servidor quedó abierto | Ciérralo con `Ctrl + C` en su terminal, o cierra esa terminal |
+| La página queda en blanco tras guardar | Hay un error de sintaxis en el archivo | Abre la consola de Chrome (`F12`) y la terminal: indican el archivo y la línea |
+| Las tarjetas siguen en 12 tras el paso 3 | La plantilla todavía usa `esFavorito()` o la lista no pasa `:favorito` | Revisa los pasos 3.2 y 3.4 |
+| El producto nuevo no aparece | Falta el paso 4.3: con `shallowRef` hay que asignar una lista nueva | Cambia `push` por `productos.value = [...productos.value, nuevo]` |
+| `npm warn install-scripts` al instalar | npm avisa que bloqueó un script de una librería | Es solo un aviso; el laboratorio funciona igual |
 
 ## Limpieza
 
-1. Detén el servidor Vite en la terminal con:
+En la terminal del servidor, pulsa `Ctrl + C` para detenerlo.
 
-   ```text
-   Ctrl+C
-   ```
+## Ejercicios de reserva
 
-2. Opcionalmente, elimina las marcas de rendimiento de la sesión actual en Chrome DevTools:
+Para quien termina antes, en `Capitulo01/ejercicios-resueltos`. Cada uno se abre igual: `cd` a su carpeta, `npm install` y `npm run dev`.
 
-   ```js
-   performance.clearMarks()
-   ```
+| Nivel | Carpeta | Reto |
+|---|---|---|
+| Básico | `ejercicio-1` | Comprobar que cambiar un dato que la plantilla no lee no redibuja nada |
+| Medio | `ejercicio-2` | Encontrar y arreglar una fuga de reactividad al desestructurar |
+| Avanzado | `ejercicio-3` | Medir `computed`, `shallowRef` y `v-memo` sobre 5.000 objetos |
 
-3. Conserva los archivos creados. Son la entrada requerida para el siguiente laboratorio, donde el módulo temporal `src/state/projectHubState.js` evolucionará hacia composables y/o un store de Pinia.
+Reto extra del catálogo: busca "camara" sin tilde y no aparece "Cámara web". Pista: `texto.normalize('NFD')` separa las tildes de las letras.
 
-4. Verifica el estado final del repositorio:
+## Recursos
 
-   ```bash
-   git status
-   ```
-
-5. No cambies de rama ni crees ramas adicionales; el curso continúa utilizando `main`.
-
-## Resumen
-
-En este laboratorio aplicaste el modelo de reactividad de Vue para diagnosticar renders y reducir actualizaciones innecesarias. Instrumentaste componentes con `performance.mark()` y `console.count()`, observaste dependencias con Vue Devtools y separaste el estado local del estado compartido.
-
-La solución final usa:
-
-- `ref` para valores independientes como tema, filtro y selección.
-- `computed` para datos derivados y cacheados.
-- `watch` para centralizar el efecto secundario de sincronización del tema.
-- `shallowRef` para colecciones tratadas como datos inmutables.
-- `v-memo` para reutilizar filas estables de una lista.
-- `src/state/projectHubState.js` como frontera temporal de estado compartido.
-
-Como siguiente paso, esta estructura permitirá extraer lógica reutilizable mediante composables y migrar el estado global a una arquitectura modular con Pinia.
-
-### Recursos opcionales
-
-- [Vue: fundamentos de reactividad](https://es.vuejs.org/guide/essentials/reactivity-fundamentals.html)
-- [Vue: reactividad en profundidad](https://vuejs.org/guide/extras/reactivity-in-depth.html)
-- [Vue: propiedades calculadas](https://es.vuejs.org/guide/essentials/computed.html)
-- [Vue: optimización de rendimiento](https://vuejs.org/guide/best-practices/performance.html)
-- [Chrome DevTools: Performance](https://developer.chrome.com/docs/devtools/performance)
+- [Reactividad en profundidad](https://vuejs.org/guide/extras/reactivity-in-depth): cómo Vue vigila datos y actualiza la pantalla.
+- [Propiedades computadas](https://vuejs.org/guide/essentials/computed): valores calculados que se guardan y recalculan solos.
+- [Rendimiento](https://vuejs.org/guide/best-practices/performance): técnicas oficiales, incluidas `shallowRef` y props estables.
