@@ -598,9 +598,9 @@ La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene 
 
 ```bash
 cd ejercicio-resuelto
-corepack enable          # activa pnpm, que viene con Node.js
-pnpm install             # instala las dependencias de todo el monorrepositorio
-pnpm dev                 # arranca la aplicación
+npm install -g pnpm@9.15.4   # instala pnpm en la versión del curso (si ya lo hiciste en la Preparación, sáltalo)
+pnpm install                 # instala las dependencias de todo el monorrepositorio
+pnpm dev                     # arranca la aplicación en http://127.0.0.1:5178
 ```
 
 ## Problemas frecuentes
@@ -612,6 +612,7 @@ pnpm dev                 # arranca la aplicación
 | `Bind for 0.0.0.0:8088 failed: port is already allocated` o `/health` responde algo que no es `ok` | Otro programa usa el puerto 8088 en tu equipo. Borra el contenedor con `docker rm -f catalogo-platform` y arráncalo con otro puerto, por ejemplo `-p 8089:80`, y usa ese puerto en `curl` y en Chrome. |
 | `Failed to resolve import "@catalogo/ui"` | Agregaste la dependencia y no corriste `pnpm install`. |
 | `Missing "./src/estado.js" specifier in "@catalogo/ui" package` | Importaste una ruta interna. Importa desde `@catalogo/ui`. |
+| `Error: Cannot find matching keyid` al ejecutar `pnpm` | Corriste `corepack enable` con un Node.js 22 anterior a 22.14: su Corepack trae llaves de firma viejas y no puede bajar pnpm. Ejecuta `corepack disable pnpm` y luego `npm install -g pnpm@9.15.4`. |
 | `ERR_PNPM_OUTDATED_LOCKFILE` al construir la imagen | Cambiaste un `package.json` sin actualizar el bloqueo. Corre `pnpm install` y vuelve a construir. |
 | `failed to connect to the docker API` o `error during connect` | Docker Desktop está cerrado. Ábrelo y espera *Engine running*. |
 | `WARN GET https://registry.npmjs.org/... error (ETIMEDOUT)` durante `docker build` | La red del contenedor va lenta. pnpm reintenta solo; espera a ver `Done in`. Si falla del todo, repite el `docker build`. |
