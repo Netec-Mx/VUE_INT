@@ -1,8 +1,0 @@
-<template>
-  <div class="card">
-    <slot />
-  </div>
-</template>
-<style scoped>
-.card { background: white; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-</style>

@@ -11,7 +11,6 @@
 
 Vas a construir y medir una SPA (aplicación de una sola página) que trabaja de más, y a mejorarla con tres herramientas de Vue: `computed`, props y `shallowRef`. Es un catálogo de 12 productos con un panel que cuenta cuántas veces Vue vuelve a dibujar cada parte. Al marcar un favorito, al principio se redibujan las 12 tarjetas; al terminar, solo 1. No se trata de que "se sienta" más rápida: vas a ver el número antes y después.
 
-![Resultado final: catálogo con el panel de medición](imagenes/lab01-final.png)
 
 ## Objetivos
 
@@ -261,7 +260,6 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
 
 **Qué debes ver:** el catálogo con 12 tarjetas y, a la derecha, el panel **Medición** con Dibujos de tarjetas **0**, Dibujos de la lista **0** y Cálculos del filtro **1** (el filtro se calculó una vez para dibujar la lista al abrir). Escribe "cable" en el buscador: queda solo "Cable HDMI".
 
-![Catálogo al abrirlo por primera vez](imagenes/lab01-preparacion.png)
 
 ## Paso 2. Medir el problema (2 minutos)
 
@@ -280,7 +278,6 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
 
 **Qué debes ver:** Dibujos de tarjetas **12**, Dibujos de la lista **1**, Cálculos del filtro **1**.
 
-![Medición antes de optimizar: 12 dibujos de tarjetas](imagenes/lab01-paso2-antes.png)
 
 **Por qué pasa:** cada tarjeta llamó a `esFavorito()`, que lee la lista completa de favoritos. Vue anotó que las 12 la leyeron; cuando cambia, las redibuja a todas.
 
@@ -378,7 +375,6 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
 
 **Qué debes ver:** Dibujos de tarjetas **1**. ¿Se parece a lo que predijiste en el paso 2?
 
-![Medición después de optimizar: 1 dibujo de tarjeta](imagenes/lab01-paso4-despues.png)
 
 ## Paso 5. shallowRef para la lista grande (3 minutos)
 
@@ -412,7 +408,6 @@ Antes de empezar, ten presente que cada vez que guardas `App.vue`, Vite vuelve a
 
 **Qué debes ver:** la tarjeta "Producto nuevo 13" al final y el resumen "Favoritos: 0 de 13 productos".
 
-![La lista con shallowRef y el producto nuevo](imagenes/lab01-paso5-shallowref.png)
 
 ## Paso 6. Cerrar la medición (1 minuto)
 
@@ -529,6 +524,16 @@ productos.value = [...productos.value, nuevo]       // lista nueva: copia los an
 ```
 
 </details>
+
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5171     # arranca la aplicación en http://localhost:5171
+```
 
 ## Problemas frecuentes
 

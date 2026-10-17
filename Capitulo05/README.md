@@ -586,6 +586,16 @@ const store = useProjectsStore()                     // la misma tienda que usa 
 
 2. Si quieres liberar espacio, borra la carpeta `node_modules`; `npm install` la recrea.
 
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5175     # arranca la aplicación en http://localhost:5175
+```
+
 ## Problemas frecuentes
 
 | Lo que ves | Por qué pasa | Arreglo |

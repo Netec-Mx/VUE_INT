@@ -1,1 +1,0 @@
-{"name": "capitulo-6-ejercicio-1", "private": true, "type": "module", "scripts": {"build": "vite build", "build:antes": "vite build --mode antes", "dev": "vite", "preview": "vite preview"}}

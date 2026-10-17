@@ -1,9 +1,0 @@
-{
-  "name": "vue-scalable-monorepo",
-  "private": true,
-  "scripts": {
-    "build": "pnpm -r run build",
-    "docker:build": "docker build -t vue-monorepo-app .",
-    "docker:run": "docker run -d -p 8080:80 --name vue-app vue-monorepo-app"
-  }
-}

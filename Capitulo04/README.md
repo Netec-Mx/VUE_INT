@@ -642,6 +642,16 @@ createApp(App)                                       // crea la aplicación con 
 
 </details>
 
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5174     # arranca la aplicación en http://localhost:5174
+```
+
 ## Problemas frecuentes
 
 | Lo que ves | Por qué pasa | Cómo se arregla |

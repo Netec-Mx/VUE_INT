@@ -627,9 +627,20 @@ Son 3 tarjetas: Cypress atrapó la petición y respondió con la fixture. Busca 
    }
    ```
 
-Los demás archivos se escriben una sola vez y completos: el bloque de cada paso ya es su versión final. En `solucion/` también está el `README.md` en inglés que crea la plantilla de Vite; la guía no lo toca.
+Los demás archivos se escriben una sola vez y completos: el bloque de cada paso ya es su versión final. En `ejercicio-resuelto/` también está el `README.md` en inglés que crea la plantilla de Vite; la guía no lo toca.
 
 </details>
+
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5177     # arranca la aplicación en http://localhost:5177
+npm run test:run         # corre las pruebas unitarias y de componentes
+```
 
 ## Problemas frecuentes
 

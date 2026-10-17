@@ -530,6 +530,16 @@ En `App.vue`, antes de `<strong>Catálogo Pro</strong>`, agrega el logotipo que 
 - Filtro memoizado con `computed` y filas con `v-memo` y `v-once`.
 - `docs/performance-report.md` con el antes y el después.
 
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5176     # arranca la aplicación en http://localhost:5176
+```
+
 ## Problemas frecuentes
 
 | Lo que ves | Por qué pasa | Cómo se arregla |

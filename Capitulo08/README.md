@@ -592,6 +592,17 @@ docker inspect --format "{{.Config.Labels}}" catalogo-platform
 - Contenedor `healthy`: `/health` y `/catalogo` responden 200.
 - CI en `completed success` y la imagen publicada con las etiquetas `1.0.0` y SHA.
 
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+corepack enable          # activa pnpm, que viene con Node.js
+pnpm install             # instala las dependencias de todo el monorrepositorio
+pnpm dev                 # arranca la aplicación
+```
+
 ## Problemas frecuentes
 
 | Mensaje | Causa y arreglo |

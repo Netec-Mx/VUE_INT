@@ -454,6 +454,16 @@ Todos se vieron en las diapositivas del capítulo 2, salvo el que se indica:
 
 Cada archivo final aparece completo en su paso: los composables en los pasos 2 y 3, `keys.js` y `TaskCollectionProvider.vue` en el paso 4, `ProjectHubView.vue` en el paso 4, y `App.vue` en el paso 5.
 
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5172     # arranca la aplicación en http://localhost:5172
+```
+
 ## Problemas frecuentes
 
 | Lo que ves | Por qué pasa | Cómo se arregla |
