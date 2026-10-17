@@ -1,1572 +1,671 @@
-# 4 Practica: implementar clientes REST y GraphQL con manejo de cache y errores
+---
+lang: es-CO
+---
 
-## Metadatos
+# Práctica 5.4: clientes REST y GraphQL con manejo de caché y errores
 
-| Propiedad | Valor |
+| Campo | Valor |
 |---|---|
 | Duración | 46 minutos |
-| Complejidad | Difícil |
+| Complejidad | Intermedia |
 | Nivel de Bloom | Aplicar |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio extenderás la SPA **ProjectHub** creada en el laboratorio anterior para consumir APIs REST y GraphQL simuladas mediante MSW. Implementarás un cliente Axios con autenticación, tiempo de espera e interceptores de normalización de errores, además de Apollo Client con caché normalizada para proyectos y tareas.
+Vas a construir **ProjectHub**, una pantalla de proyectos y tareas, que pide sus datos a una API (Application Programming Interface, la puerta por la que un programa pide datos a otro) de dos estilos: **REST** con Axios para la lista y para crear tareas, y **GraphQL** con Apollo Client para el detalle de cada proyecto. No hay servidor real: **MSW** (Mock Service Worker, trabajador de servicio simulado) responde dentro del navegador, con errores incluidos. Al final, cada fallo llega a la pantalla como un mismo `AppError` y Apollo guarda cada proyecto y cada tarea una sola vez.
 
-Los stores de Pinia delegarán la comunicación en los clientes de datos, mantendrán los estados de operación centralizados y mostrarán notificaciones coherentes ante errores de red, autorización, validación o indisponibilidad del servicio.
-
-## Objetivos de aprendizaje
-
-Al finalizar el laboratorio podrás:
-
-- [ ] Crear un cliente REST basado en Axios con `baseURL`, `timeout` e interceptores de autenticación y errores.
-- [ ] Modelar errores de red como objetos `AppError` consistentes para toda la aplicación.
-- [ ] Configurar Apollo Client con `InMemoryCache`, `typePolicies` y consultas GraphQL con variables.
-- [ ] Integrar servicios REST y GraphQL en los stores `useProjectsStore` y `useTasksStore`.
-- [ ] Verificar que Apollo muestra datos cacheados mientras realiza una actualización en segundo plano.
-
-## Prerrequisitos
-
-### Conocimientos requeridos
-
-- Laboratorio **04-00-01** finalizado, con Pinia configurado, persistencia selectiva y stores modulares activos.
-- Conocimiento básico de métodos HTTP, códigos de estado, cabeceras y cuerpos JSON.
-- Conocimiento básico de GraphQL: consultas, variables, campos y respuesta `data`.
-- Uso básico de Vue 3 con Composition API y `<script setup>`.
-- Navegación por Chrome DevTools.
-
-### Acceso y dependencias
-
-Debes disponer de:
-
-- El repositorio de trabajo con una única rama llamada `main`.
-- La aplicación existente denominada `projecthub-spa`.
-- Node.js `22.14.0` y npm `10.9.2`.
-- Google Chrome instalado.
-- Docker Desktop no es necesario para este laboratorio.
-- Puertos locales `5173` y `4173` disponibles.
-- No debes iniciar ningún servicio en el puerto `3000`.
-
-| Herramienta | Versión esperada |
-|---|---:|
-| Vue | 3.5.13 |
-| Vite | 6.1.0 |
-| Pinia | 3.0.1 |
-| Axios | 1.8.4 |
-| Apollo Client | 3.13.8 |
-| GraphQL | 16.10.0 |
-| MSW | 2.7.3 |
-
-## Entorno del laboratorio
-
-El directorio de trabajo obligatorio es:
-
-```bash
-..
-```
-
-En Windows, utiliza el equivalente:
-
-```powershell
-C:\workspace\vue-intermedio-labs
-```
-
-### Preparación inicial
-
-1. Abre una terminal.
-2. Accede al proyecto.
-3. Confirma que trabajas en la rama `main`.
-4. Instala las dependencias necesarias si aún no están presentes.
-
-```bash
-cd ../projecthub-spa
-git branch --show-current
-npm install
-npm install axios@1.8.4 @apollo/client@3.13.8 graphql@16.10.0 msw@2.7.3
-```
-
-**Salida esperada**
-
-El comando de rama debe mostrar:
+**Así se ve al terminar** (texto de la pantalla con la sesión iniciada y el proyecto abierto):
 
 ```text
-main
+ProjectHub
+[Cerrar sesión]
+[Portal de clientes]  [Migración de facturación]
+
+Portal de clientes
+- Diseñar pantalla de acceso
+- Recuperar contraseña
+Nueva tarea [________] [Crear tarea]
+Caché de Apollo: 5 entradas
+Task:t-1 · Task:t-2 · Project:p-100 · Task:t-3 · Project:p-200
 ```
 
-**Verificación**
+El orden de las claves de la caché puede variar; lo que importa es que hay 5 y ninguna se repite.
 
-Comprueba las dependencias instaladas:
+## Objetivos
 
-```bash
-npm ls axios @apollo/client graphql msw
-```
+Al terminar podrás:
 
-La salida debe contener las versiones compatibles con las indicadas en la tabla anterior.
+- Crear un cliente REST con Axios que agrega el token en cada petición y traduce todo fallo a `AppError`.
+- Consultar GraphQL con Apollo Client y comprobar que la segunda visita sale de la caché, sin red.
+- Mostrar un error de validación (422) junto al campo y uno de sesión (401) como aviso general.
 
----
+## Conceptos que usas
 
-## Paso a paso
+Todos están en las diapositivas: Pinia y `defineStore` (capítulo 4); instancia de Axios, interceptores, `localStorage` y variables `VITE_` (tema 5.1); consulta GraphQL con variables, `gql`, `ApolloClient`, `HttpLink` e `InMemoryCache` (tema 5.2); `AppError`, normalización y `fetchPolicy` (tema 5.3); MSW (diapositiva de introducción de esta práctica).
 
-### Paso 1. Preparar las variables de entorno y el servicio worker de MSW
+Tres piezas pequeñas que aparecen en el código: `__typename` es el campo con el que GraphQL dice de qué tipo es cada objeto, y Apollo lo une al `id` para formar la clave `Project:p-100`; `cache.extract()` devuelve en un objeto todo lo que guarda la caché de Apollo; `import.meta.env.DEV` es `true` solo con el servidor de desarrollo de Vite, y `false` en la compilación de producción.
 
-**Objetivo:** Configurar las URL constantes de REST y GraphQL y asegurar que MSW intercepte las solicitudes únicamente en desarrollo.
+> **Repaso del capítulo 4:** la tienda de esta práctica es una tienda de Pinia en forma de función, como `useUiStore`: dentro declaras `ref` y funciones, y al final devuelves lo que la pantalla puede usar. La regla del capítulo sigue: los componentes leen la tienda y la tienda llama a los servicios.
 
-**Instrucciones**
+## Antes de empezar
 
-1. Crea o actualiza el archivo `.env.local` en la raíz de `projecthub-spa`.
+- **Node.js 20.18 o 22.11**, los de la guía de instalación. Compruébalo con `node -v`.
+- Google Chrome y Visual Studio Code.
+- Conexión a internet para descargar los paquetes.
 
-```dotenv
-VITE_API_URL=http://127.0.0.1:5173/api
-VITE_GRAPHQL_URL=http://127.0.0.1:5173/graphql
-```
+## Preparación (6 minutos)
 
-2. Genera el archivo de servicio de MSW en la carpeta pública. Ejecuta este comando desde la raíz del proyecto:
-
-```bash
-npx msw@2.7.3 init public --save
-```
-
-3. Verifica que existe el archivo:
-
-```bash
-ls public/mockServiceWorker.js
-```
-
-4. Crea o actualiza `src/mocks/browser.js`.
-
-```js
-// src/mocks/browser.js
-import { setupWorker } from 'msw/browser'
-import { handlers } from './handlers'
-
-export const worker = setupWorker(...handlers)
-```
-
-5. Ajusta el archivo `src/main.js` o `src/main.ts` para iniciar MSW solo en desarrollo antes de montar Vue.
-
-```js
-// src/main.js
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
-import App from './App.vue'
-import router from './router'
-
-async function bootstrap() {
-  if (import.meta.env.DEV) {
-    const { worker } = await import('./mocks/browser')
-
-    await worker.start({
-      onUnhandledRequest: 'bypass'
-    })
-  }
-
-  const app = createApp(App)
-  const pinia = createPinia()
-
-  app.use(pinia)
-  app.use(router)
-  app.mount('#app')
-}
-
-bootstrap()
-```
-
-> Si el laboratorio anterior ya tiene una función `bootstrap`, conserva su estructura y añade únicamente el bloque de MSW antes de `app.mount()`.
-
-**Salida esperada**
-
-Al iniciar Vite en modo desarrollo, Chrome mostrará en la consola un mensaje similar a:
-
-```text
-[MSW] Mocking enabled.
-```
-
-**Verificación**
-
-Ejecuta el servidor local:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-Abre:
-
-```text
-http://127.0.0.1:5173
-```
-
-En Chrome DevTools, pestaña **Console**, confirma que MSW está activo y no aparecen errores de carga para `mockServiceWorker.js`.
-
----
-
-### Paso 2. Definir datos simulados y handlers REST y GraphQL
-
-**Objetivo:** Proporcionar endpoints simulados coherentes para Axios y Apollo Client.
-
-**Instrucciones**
-
-1. Crea el archivo `src/mocks/handlers.js`.
-2. Añade datos de proyectos y tareas.
-3. Define handlers REST para:
-   - `GET /api/projects`
-   - `GET /api/projects/:id/tasks`
-   - `POST /api/tasks`
-4. Define handlers GraphQL para:
-   - Consulta de proyectos.
-   - Consulta de tareas de un proyecto.
-   - Consulta de detalle de tarea.
-
-```js
-// src/mocks/handlers.js
-import { http, HttpResponse, graphql } from 'msw'
-
-const projects = [
-  {
-    id: 'p-100',
-    name: 'Portal de clientes',
-    description: 'SPA para seguimiento de solicitudes de clientes.',
-    status: 'active'
-  },
-  {
-    id: 'p-200',
-    name: 'Migración de facturación',
-    description: 'Actualización del módulo de facturación.',
-    status: 'planning'
-  },
-  {
-    id: 'p-300',
-    name: 'Observabilidad',
-    description: 'Paneles y alertas para servicios internos.',
-    status: 'active'
-  }
-]
-
-let tasks = [
-  {
-    id: 't-101',
-    projectId: 'p-100',
-    title: 'Diseñar pantalla de acceso',
-    completed: true,
-    priority: 'high'
-  },
-  {
-    id: 't-102',
-    projectId: 'p-100',
-    title: 'Implementar recuperación de contraseña',
-    completed: false,
-    priority: 'medium'
-  },
-  {
-    id: 't-201',
-    projectId: 'p-200',
-    title: 'Mapear campos del sistema anterior',
-    completed: false,
-    priority: 'high'
-  },
-  {
-    id: 't-301',
-    projectId: 'p-300',
-    title: 'Configurar métricas de rendimiento',
-    completed: false,
-    priority: 'medium'
-  }
-]
-
-function requireAuthorization(request) {
-  const authorization = request.headers.get('Authorization')
-
-  return authorization?.startsWith('Bearer ')
-}
-
-export const handlers = [
-  http.get('http://127.0.0.1:5173/api/projects', ({ request }) => {
-    if (!requireAuthorization(request)) {
-      return HttpResponse.json(
-        { message: 'La sesión no es válida o ha expirado.' },
-        { status: 401 }
-      )
-    }
-
-    return HttpResponse.json({ data: projects })
-  }),
-
-  http.get(
-    'http://127.0.0.1:5173/api/projects/:projectId/tasks',
-    ({ params, request }) => {
-      if (!requireAuthorization(request)) {
-        return HttpResponse.json(
-          { message: 'La sesión no es válida o ha expirado.' },
-          { status: 401 }
-        )
-      }
-
-      const project = projects.find((item) => item.id === params.projectId)
-
-      if (!project) {
-        return HttpResponse.json(
-          { message: 'El proyecto solicitado no existe.' },
-          { status: 404 }
-        )
-      }
-
-      return HttpResponse.json({
-        data: tasks.filter((task) => task.projectId === params.projectId)
-      })
-    }
-  ),
-
-  http.post('http://127.0.0.1:5173/api/tasks', async ({ request }) => {
-    if (!requireAuthorization(request)) {
-      return HttpResponse.json(
-        { message: 'La sesión no es válida o ha expirado.' },
-        { status: 401 }
-      )
-    }
-
-    const payload = await request.json()
-
-    if (!payload.title?.trim() || !payload.projectId) {
-      return HttpResponse.json(
-        {
-          message: 'No fue posible validar la tarea.',
-          errors: {
-            title: !payload.title?.trim()
-              ? ['El título es obligatorio.']
-              : [],
-            projectId: !payload.projectId
-              ? ['El proyecto es obligatorio.']
-              : []
-          }
-        },
-        { status: 422 }
-      )
-    }
-
-    const projectExists = projects.some(
-      (project) => project.id === payload.projectId
-    )
-
-    if (!projectExists) {
-      return HttpResponse.json(
-        { message: 'El proyecto asociado no existe.' },
-        { status: 404 }
-      )
-    }
-
-    const task = {
-      id: `t-${Date.now()}`,
-      projectId: payload.projectId,
-      title: payload.title.trim(),
-      completed: false,
-      priority: payload.priority ?? 'medium'
-    }
-
-    tasks = [...tasks, task]
-
-    return HttpResponse.json({ data: task }, { status: 201 })
-  }),
-
-  graphql.query('Projects', ({ request }) => {
-    if (!requireAuthorization(request)) {
-      return HttpResponse.json({
-        errors: [
-          {
-            message: 'No autorizado.',
-            extensions: { code: 'UNAUTHENTICATED' }
-          }
-        ]
-      })
-    }
-
-    return HttpResponse.json({
-      data: {
-        projects
-      }
-    })
-  }),
-
-  graphql.query('ProjectTasks', ({ variables, request }) => {
-    if (!requireAuthorization(request)) {
-      return HttpResponse.json({
-        errors: [
-          {
-            message: 'No autorizado.',
-            extensions: { code: 'UNAUTHENTICATED' }
-          }
-        ]
-      })
-    }
-
-    const project = projects.find((item) => item.id === variables.projectId)
-
-    if (!project) {
-      return HttpResponse.json({
-        errors: [
-          {
-            message: 'Proyecto no encontrado.',
-            extensions: { code: 'NOT_FOUND' }
-          }
-        ]
-      })
-    }
-
-    return HttpResponse.json({
-      data: {
-        project: {
-          ...project,
-          tasks: tasks.filter((task) => task.projectId === variables.projectId)
-        }
-      }
-    })
-  }),
-
-  graphql.query('TaskDetail', ({ variables, request }) => {
-    if (!requireAuthorization(request)) {
-      return HttpResponse.json({
-        errors: [
-          {
-            message: 'No autorizado.',
-            extensions: { code: 'UNAUTHENTICATED' }
-          }
-        ]
-      })
-    }
-
-    const task = tasks.find((item) => item.id === variables.taskId)
-
-    if (!task) {
-      return HttpResponse.json({
-        errors: [
-          {
-            message: 'Tarea no encontrada.',
-            extensions: { code: 'NOT_FOUND' }
-          }
-        ]
-      })
-    }
-
-    return HttpResponse.json({
-      data: {
-        task
-      }
-    })
-  })
-]
-```
-
-**Salida esperada**
-
-El proyecto debe compilar sin errores de importación relacionados con `msw`, `http`, `HttpResponse` o `graphql`.
-
-**Verificación**
-
-Con la aplicación abierta, entra en Chrome DevTools:
-
-1. Abre la pestaña **Network**.
-2. Activa el filtro **Fetch/XHR**.
-3. Navega a una vista que cargue proyectos tras completar los pasos posteriores.
-4. Las peticiones deben indicar que son atendidas por el Service Worker, no por un servidor externo.
-
----
-
-### Paso 3. Crear el contrato centralizado `AppError`
-
-**Objetivo:** Convertir errores técnicos de Axios y Apollo en un contrato seguro y predecible para stores y componentes.
-
-**Instrucciones**
-
-1. Crea la carpeta `src/services` si no existe.
-2. Crea `src/services/appError.js`.
-3. Implementa la clase y los normalizadores para REST y GraphQL.
-
-```js
-// src/services/appError.js
-export class AppError extends Error {
-  constructor({
-    message = 'No fue posible completar la operación.',
-    type = 'unknown',
-    status = null,
-    details = null,
-    cause = null
-  } = {}) {
-    super(message)
-
-    this.name = 'AppError'
-    this.type = type
-    this.status = status
-    this.details = details
-    this.cause = cause
-  }
-}
-
-function typeFromStatus(status) {
-  if (status === 401) return 'authentication'
-  if (status === 403) return 'authorization'
-  if (status === 404) return 'not-found'
-  if (status === 422) return 'validation'
-  if (status === 500 || status === 502 || status === 503) return 'service'
-  return 'http'
-}
-
-export function normalizeRestError(error) {
-  if (error instanceof AppError) {
-    return error
-  }
-
-  if (error.code === 'ERR_CANCELED') {
-    return new AppError({
-      message: 'La solicitud fue cancelada.',
-      type: 'cancelled',
-      cause: error
-    })
-  }
-
-  if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-    return new AppError({
-      message: 'La solicitud excedió el tiempo de espera.',
-      type: 'timeout',
-      cause: error
-    })
-  }
-
-  const status = error.response?.status ?? null
-  const payload = error.response?.data
-
-  if (!status) {
-    return new AppError({
-      message: 'No se pudo conectar con el servicio. Verifica tu conexión.',
-      type: 'network',
-      cause: error
-    })
-  }
-
-  return new AppError({
-    message:
-      payload?.message ??
-      `No fue posible completar la solicitud (${status}).`,
-    type: typeFromStatus(status),
-    status,
-    details: payload?.errors ?? payload ?? null,
-    cause: error
-  })
-}
-
-export function normalizeGraphqlError(error) {
-  if (error instanceof AppError) {
-    return error
-  }
-
-  const graphQLError = error.graphQLErrors?.[0]
-  const code = graphQLError?.extensions?.code
-
-  if (code === 'UNAUTHENTICATED') {
-    return new AppError({
-      message: 'La sesión no es válida o ha expirado.',
-      type: 'authentication',
-      status: 401,
-      details: graphQLError,
-      cause: error
-    })
-  }
-
-  if (code === 'NOT_FOUND') {
-    return new AppError({
-      message: graphQLError.message,
-      type: 'not-found',
-      status: 404,
-      details: graphQLError,
-      cause: error
-    })
-  }
-
-  if (error.networkError) {
-    return new AppError({
-      message: 'No se pudo conectar con el servicio GraphQL.',
-      type: 'network',
-      details: error.networkError,
-      cause: error
-    })
-  }
-
-  return new AppError({
-    message:
-      graphQLError?.message ??
-      error.message ??
-      'No fue posible completar la consulta GraphQL.',
-    type: 'graphql',
-    details: graphQLError ?? null,
-    cause: error
-  })
-}
-```
-
-**Salida esperada**
-
-La aplicación dispondrá de un único formato de error con estas propiedades principales:
-
-```js
-{
-  name: 'AppError',
-  message: '...',
-  type: 'validation',
-  status: 422,
-  details: {}
-}
-```
-
-**Verificación**
-
-En la consola de Chrome, después de provocar un error de validación en una tarea, el error gestionado debe cumplir:
-
-```js
-error.name === 'AppError'
-error.type === 'validation'
-error.status === 422
-```
-
----
-
-### Paso 4. Implementar el cliente REST con Axios e interceptores
-
-**Objetivo:** Crear `restClient.js` con autenticación simulada, tiempo de espera y normalización de errores.
-
-**Instrucciones**
-
-1. Crea el archivo `src/services/restClient.js`.
-2. Configura Axios con `baseURL`, `timeout` y la cabecera `Accept`.
-3. Añade un interceptor de solicitud que lea el token de autenticación persistido.
-4. Añade un interceptor de respuesta que convierta todos los fallos en `AppError`.
-
-```js
-// src/services/restClient.js
-import axios from 'axios'
-import { normalizeRestError } from './appError'
-
-export const restClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  timeout: 8_000,
-  headers: {
-    Accept: 'application/json'
-  }
-})
-
-restClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-
-  return config
-})
-
-restClient.interceptors.response.use(
-  (response) => response,
-  (error) => Promise.reject(normalizeRestError(error))
-)
-```
-
-5. Crea `src/services/projectsRestApi.js`.
-
-```js
-// src/services/projectsRestApi.js
-import { restClient } from './restClient'
-
-export async function getProjects({ signal } = {}) {
-  const response = await restClient.get('/projects', { signal })
-
-  return response.data.data
-}
-
-export async function getProjectTasks(projectId, { signal } = {}) {
-  const response = await restClient.get(`/projects/${projectId}/tasks`, {
-    signal
-  })
-
-  return response.data.data
-}
-```
-
-6. Crea `src/services/tasksRestApi.js`.
-
-```js
-// src/services/tasksRestApi.js
-import { restClient } from './restClient'
-
-export async function createTask(payload) {
-  const response = await restClient.post('/tasks', payload, {
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  })
-
-  return response.data.data
-}
-```
-
-> No añadas `Content-Type: application/json` a la configuración global de Axios. Una carga futura basada en `FormData` requerirá que el navegador genere automáticamente la cabecera multipart correcta.
-
-**Salida esperada**
-
-Todas las peticiones REST incluirán una cabecera como:
-
-```text
-Authorization: Bearer <token>
-```
-
-cuando exista `access_token` en `localStorage`.
-
-**Verificación**
-
-1. Inicia sesión mediante el flujo simulado creado en laboratorios anteriores.
-2. Abre Chrome DevTools > **Application** > **Local Storage**.
-3. Comprueba que existe `access_token`.
-4. En **Network**, selecciona una petición a `/api/projects`.
-5. En **Request Headers**, verifica la cabecera `Authorization`.
-
----
-
-### Paso 5. Configurar Apollo Client y la caché normalizada
-
-**Objetivo:** Configurar Apollo Client para utilizar GraphQL, autenticación y caché basada en identidad de proyectos y tareas.
-
-**Instrucciones**
-
-1. Crea el archivo `src/services/graphqlClient.js`.
-2. Configura un enlace HTTP hacia `VITE_GRAPHQL_URL`.
-3. Añade un enlace de contexto que incluya el token.
-4. Configura `InMemoryCache` con políticas para `Project` y `Task`.
-
-```js
-// src/services/graphqlClient.js
-import {
-  ApolloClient,
-  HttpLink,
-  InMemoryCache,
-  from
-} from '@apollo/client/core'
-import { setContext } from '@apollo/client/link/context'
-
-const httpLink = new HttpLink({
-  uri: import.meta.env.VITE_GRAPHQL_URL
-})
-
-const authLink = setContext((_, { headers }) => {
-  const token = localStorage.getItem('access_token')
-
-  return {
-    headers: {
-      ...headers,
-      Authorization: token ? `Bearer ${token}` : ''
-    }
-  }
-})
-
-export const graphqlClient = new ApolloClient({
-  link: from([authLink, httpLink]),
-  cache: new InMemoryCache({
-    typePolicies: {
-      Project: {
-        keyFields: ['id']
-      },
-      Task: {
-        keyFields: ['id']
-      },
-      Query: {
-        fields: {
-          projects: {
-            merge(_, incoming) {
-              return incoming
-            }
-          }
-        }
-      }
-    }
-  }),
-  connectToDevTools: import.meta.env.DEV
-})
-```
-
-5. Crea `src/services/projectsGraphqlApi.js`.
-
-```js
-// src/services/projectsGraphqlApi.js
-import { gql } from '@apollo/client/core'
-import { graphqlClient } from './graphqlClient'
-import { normalizeGraphqlError } from './appError'
-
-export const PROJECTS_QUERY = gql`
-  query Projects {
-    projects {
-      id
-      name
-      description
-      status
-    }
-  }
-`
-
-export const PROJECT_TASKS_QUERY = gql`
-  query ProjectTasks($projectId: ID!) {
-    project(id: $projectId) {
-      id
-      name
-      description
-      status
-      tasks {
-        id
-        projectId
-        title
-        completed
-        priority
-      }
-    }
-  }
-`
-
-export async function getProjectsFromGraphql() {
-  try {
-    const result = await graphqlClient.query({
-      query: PROJECTS_QUERY,
-      fetchPolicy: 'cache-and-network',
-      errorPolicy: 'none'
-    })
-
-    return result.data.projects
-  } catch (error) {
-    throw normalizeGraphqlError(error)
-  }
-}
-
-export async function getProjectTasksFromGraphql(projectId) {
-  try {
-    const result = await graphqlClient.query({
-      query: PROJECT_TASKS_QUERY,
-      variables: { projectId },
-      fetchPolicy: 'cache-first',
-      errorPolicy: 'none'
-    })
-
-    return result.data.project
-  } catch (error) {
-    throw normalizeGraphqlError(error)
-  }
-}
-```
-
-**Salida esperada**
-
-Apollo identificará de forma única los objetos en caché con referencias equivalentes a:
-
-```text
-Project:{"id":"p-100"}
-Task:{"id":"t-101"}
-```
-
-**Verificación**
-
-Instala la extensión **Apollo Client Devtools** en Chrome si está disponible en tu entorno. Después:
-
-1. Recarga la aplicación.
-2. Abre DevTools.
-3. Accede a la pestaña de Apollo.
-4. Revisa que la caché contiene entidades `Project` y `Task` después de navegar por las vistas correspondientes.
-
----
-
-### Paso 6. Integrar los clientes en los stores de Pinia
-
-**Objetivo:** Delegar las solicitudes de red en servicios especializados y mantener los estados de interfaz centralizados.
-
-**Instrucciones**
-
-1. Identifica los nombres reales de los stores creados en el laboratorio 04-00-01.
-2. En esta guía se asume que existen:
-   - `useApiStatusStore`
-   - `useUiStore`
-   - `useProjectsStore`
-   - `useTasksStore`
-3. Si tus métodos tienen nombres distintos, conserva su comportamiento y adapta las llamadas mostradas.
-
-El store de estado de API debe poder registrar operaciones. Debe exponer, como mínimo, métodos equivalentes a:
-
-```js
-apiStatus.start('projects:list')
-apiStatus.finish('projects:list')
-```
-
-El store de interfaz debe poder mostrar una notificación. Debe exponer un método equivalente a:
-
-```js
-ui.notify({
-  type: 'error',
-  message: 'Mensaje visible para el usuario.'
-})
-```
-
-4. Actualiza `src/stores/projects.js` o el archivo equivalente.
-
-```js
-// src/stores/projects.js
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { getProjects } from '../services/projectsRestApi'
-import {
-  getProjectsFromGraphql,
-  getProjectTasksFromGraphql
-} from '../services/projectsGraphqlApi'
-import { useApiStatusStore } from './apiStatus'
-import { useUiStore } from './ui'
-
-export const useProjectsStore = defineStore('projects', () => {
-  const projects = ref([])
-  const selectedProject = ref(null)
-
-  function reportError(error) {
-    const ui = useUiStore()
-
-    if (error.type !== 'cancelled') {
-      ui.notify({
-        type: 'error',
-        message: error.message
-      })
-    }
-  }
-
-  async function loadProjectsRest({ signal } = {}) {
-    const apiStatus = useApiStatusStore()
-    const operation = 'projects:list:rest'
-
-    apiStatus.start(operation)
-
-    try {
-      projects.value = await getProjects({ signal })
-    } catch (error) {
-      reportError(error)
-      throw error
-    } finally {
-      apiStatus.finish(operation)
-    }
-  }
-
-  async function loadProjectsPanel() {
-    const apiStatus = useApiStatusStore()
-    const operation = 'projects:list:graphql'
-
-    apiStatus.start(operation)
-
-    try {
-      projects.value = await getProjectsFromGraphql()
-    } catch (error) {
-      reportError(error)
-      throw error
-    } finally {
-      apiStatus.finish(operation)
-    }
-  }
-
-  async function loadProjectWithTasks(projectId) {
-    const apiStatus = useApiStatusStore()
-    const operation = `projects:${projectId}:graphql`
-
-    apiStatus.start(operation)
-
-    try {
-      selectedProject.value = await getProjectTasksFromGraphql(projectId)
-
-      return selectedProject.value
-    } catch (error) {
-      reportError(error)
-      throw error
-    } finally {
-      apiStatus.finish(operation)
-    }
-  }
-
-  return {
-    projects,
-    selectedProject,
-    loadProjectsRest,
-    loadProjectsPanel,
-    loadProjectWithTasks
-  }
-})
-```
-
-5. Actualiza `src/stores/tasks.js` o el archivo equivalente.
-
-```js
-// src/stores/tasks.js
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { getProjectTasks } from '../services/projectsRestApi'
-import { createTask } from '../services/tasksRestApi'
-import { useApiStatusStore } from './apiStatus'
-import { useUiStore } from './ui'
-
-export const useTasksStore = defineStore('tasks', () => {
-  const tasksByProject = ref({})
-
-  function reportError(error) {
-    const ui = useUiStore()
-
-    if (error.type !== 'cancelled') {
-      ui.notify({
-        type: 'error',
-        message: error.message
-      })
-    }
-  }
-
-  async function loadTasksForProject(projectId, { signal } = {}) {
-    const apiStatus = useApiStatusStore()
-    const operation = `tasks:list:${projectId}`
-
-    apiStatus.start(operation)
-
-    try {
-      const tasks = await getProjectTasks(projectId, { signal })
-      tasksByProject.value[projectId] = tasks
-
-      return tasks
-    } catch (error) {
-      reportError(error)
-      throw error
-    } finally {
-      apiStatus.finish(operation)
-    }
-  }
-
-  async function addTask(payload) {
-    const apiStatus = useApiStatusStore()
-    const operation = 'tasks:create'
-
-    apiStatus.start(operation)
-
-    try {
-      const task = await createTask(payload)
-      const currentTasks = tasksByProject.value[task.projectId] ?? []
-
-      tasksByProject.value[task.projectId] = [...currentTasks, task]
-
-      return task
-    } catch (error) {
-      reportError(error)
-      throw error
-    } finally {
-      apiStatus.finish(operation)
-    }
-  }
-
-  return {
-    tasksByProject,
-    loadTasksForProject,
-    addTask
-  }
-})
-```
-
-**Salida esperada**
-
-Los componentes no construirán URLs ni usarán directamente Axios o Apollo. En su lugar, invocarán acciones de Pinia como:
-
-```js
-projectsStore.loadProjectsPanel()
-tasksStore.loadTasksForProject(projectId)
-tasksStore.addTask(payload)
-```
-
-**Verificación**
-
-Busca usos directos de Axios en los componentes:
-
-```bash
-grep -R "axios\|restClient\|graphqlClient" src/components src/views
-```
-
-La salida no debe mostrar clientes HTTP utilizados directamente dentro de componentes o vistas, salvo importaciones deliberadas para diagnóstico.
-
----
-
-### Paso 7. Consumir los stores desde las vistas y mostrar estados de carga
-
-**Objetivo:** Mostrar proyectos y tareas sin acoplar las vistas a detalles de REST o GraphQL.
-
-**Instrucciones**
-
-1. Actualiza la vista del panel de proyectos, por ejemplo `src/views/ProjectsView.vue`.
-2. Usa la acción GraphQL con `cache-and-network`.
-3. Muestra una indicación de carga y un botón de actualización.
-
-```vue
-<!-- src/views/ProjectsView.vue -->
-<script setup>
-import { computed, onMounted } from 'vue'
-import { useProjectsStore } from '../stores/projects'
-import { useApiStatusStore } from '../stores/apiStatus'
-
-const projectsStore = useProjectsStore()
-const apiStatus = useApiStatusStore()
-
-const loading = computed(() =>
-  apiStatus.isLoading('projects:list:graphql')
-)
-
-onMounted(() => {
-  projectsStore.loadProjectsPanel()
-})
-</script>
-
-<template>
-  <section>
-    <header class="toolbar">
-      <div>
-        <h1>Proyectos</h1>
-        <p>Consulta GraphQL con caché normalizada.</p>
-      </div>
-
-      <button :disabled="loading" @click="projectsStore.loadProjectsPanel">
-        Actualizar
-      </button>
-    </header>
-
-    <p v-if="loading" role="status">
-      Cargando proyectos…
-    </p>
-
-    <p v-else-if="projectsStore.projects.length === 0">
-      No hay proyectos disponibles.
-    </p>
-
-    <ul v-else class="project-list">
-      <li
-        v-for="project in projectsStore.projects"
-        :key="project.id"
-      >
-        <RouterLink
-          :to="{ name: 'project-detail', params: { id: project.id } }"
-        >
-          <strong>{{ project.name }}</strong>
-          <span>{{ project.status }}</span>
-        </RouterLink>
-      </li>
-    </ul>
-  </section>
-</template>
-```
-
-4. Actualiza la vista de detalle de proyecto, por ejemplo `src/views/ProjectDetailView.vue`.
-
-```vue
-<!-- src/views/ProjectDetailView.vue -->
-<script setup>
-import { computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { useProjectsStore } from '../stores/projects'
-import { useApiStatusStore } from '../stores/apiStatus'
-
-const route = useRoute()
-const projectsStore = useProjectsStore()
-const apiStatus = useApiStatusStore()
-
-const projectId = computed(() => String(route.params.id))
-
-const loading = computed(() =>
-  apiStatus.isLoading(`projects:${projectId.value}:graphql`)
-)
-
-watch(
-  projectId,
-  async (id) => {
-    await projectsStore.loadProjectWithTasks(id)
-  },
-  { immediate: true }
-)
-</script>
-
-<template>
-  <section>
-    <p v-if="loading" role="status">
-      Cargando detalle del proyecto…
-    </p>
-
-    <template v-else-if="projectsStore.selectedProject">
-      <h1>{{ projectsStore.selectedProject.name }}</h1>
-      <p>{{ projectsStore.selectedProject.description }}</p>
-
-      <h2>Tareas</h2>
-
-      <p v-if="projectsStore.selectedProject.tasks.length === 0">
-        Este proyecto no tiene tareas.
-      </p>
-
-      <ul v-else>
-        <li
-          v-for="task in projectsStore.selectedProject.tasks"
-          :key="task.id"
-        >
-          <input
-            :checked="task.completed"
-            type="checkbox"
-            disabled
-          >
-          {{ task.title }} - prioridad: {{ task.priority }}
-        </li>
-      </ul>
-    </template>
-  </section>
-</template>
-```
-
-5. Asegúrate de que existe una ruta con nombre `project-detail`.
-
-```js
-{
-  path: '/projects/:id',
-  name: 'project-detail',
-  component: () => import('../views/ProjectDetailView.vue'),
-  meta: { requiresAuth: true }
-}
-```
-
-**Salida esperada**
-
-La vista de proyectos debe mostrar los tres proyectos simulados. Al seleccionar uno, la aplicación debe cargar el detalle y sus tareas.
-
-**Verificación**
-
-1. Inicia sesión.
-2. Accede al panel de proyectos.
-3. Selecciona **Portal de clientes**.
-4. Deben mostrarse las tareas:
-   - Diseñar pantalla de acceso.
-   - Implementar recuperación de contraseña.
-5. Navega a otro proyecto y vuelve al primero.
-
----
-
-### Paso 8. Implementar un formulario REST para crear tareas y tratar errores de validación
-
-**Objetivo:** Consumir `POST /api/tasks` mediante Axios y mostrar errores normalizados.
-
-**Instrucciones**
-
-1. Crea `src/components/TaskCreateForm.vue`.
-2. El formulario debe enviar la tarea al store, no al cliente REST directamente.
-3. Para errores de validación, muestra los detalles del campo si existen.
-
-```vue
-<!-- src/components/TaskCreateForm.vue -->
-<script setup>
-import { computed, ref } from 'vue'
-import { useTasksStore } from '../stores/tasks'
-import { useApiStatusStore } from '../stores/apiStatus'
-
-const props = defineProps({
-  projectId: {
-    type: String,
-    required: true
-  }
-})
-
-const emit = defineEmits(['created'])
-
-const tasksStore = useTasksStore()
-const apiStatus = useApiStatusStore()
-
-const title = ref('')
-const priority = ref('medium')
-const fieldErrors = ref({})
-
-const creating = computed(() => apiStatus.isLoading('tasks:create'))
-
-async function submit() {
-  fieldErrors.value = {}
-
-  try {
-    const task = await tasksStore.addTask({
-      projectId: props.projectId,
-      title: title.value,
-      priority: priority.value
-    })
-
-    title.value = ''
-    priority.value = 'medium'
-    emit('created', task)
-  } catch (error) {
-    if (error.type === 'validation') {
-      fieldErrors.value = error.details ?? {}
-    }
-  }
-}
-</script>
-
-<template>
-  <form @submit.prevent="submit">
-    <h3>Nueva tarea</h3>
-
-    <label for="task-title">Título</label>
-    <input
-      id="task-title"
-      v-model="title"
-      :aria-invalid="Boolean(fieldErrors.title?.length)"
-      :disabled="creating"
-      type="text"
-    >
-    <small v-if="fieldErrors.title?.length" role="alert">
-      {{ fieldErrors.title[0] }}
-    </small>
-
-    <label for="task-priority">Prioridad</label>
-    <select
-      id="task-priority"
-      v-model="priority"
-      :disabled="creating"
-    >
-      <option value="low">Baja</option>
-      <option value="medium">Media</option>
-      <option value="high">Alta</option>
-    </select>
-
-    <button :disabled="creating" type="submit">
-      {{ creating ? 'Creando…' : 'Crear tarea' }}
-    </button>
-  </form>
-</template>
-```
-
-4. Importa el formulario en `ProjectDetailView.vue`.
-
-```vue
-<script setup>
-import TaskCreateForm from '../components/TaskCreateForm.vue'
-// Conserva las demás importaciones existentes.
-</script>
-```
-
-5. Añade el componente dentro del bloque que muestra el proyecto.
-
-```vue
-<TaskCreateForm :project-id="projectsStore.selectedProject.id" />
-```
-
-**Salida esperada**
-
-Al enviar una tarea válida, MSW debe responder con estado HTTP `201` y la nueva tarea debe incorporarse al store de tareas.
-
-Al enviar el formulario vacío, debe aparecer:
-
-```text
-El título es obligatorio.
-```
-
-**Verificación**
-
-En Chrome DevTools > **Network**:
-
-1. Envía una tarea válida.
-2. Selecciona la petición `POST /api/tasks`.
-3. Confirma:
-   - Método: `POST`
-   - Estado: `201`
-   - Cabecera `Authorization`
-   - Cuerpo JSON con `projectId`, `title` y `priority`.
-
-Después, envía el formulario sin título y confirma que la petición devuelve estado `422`.
-
----
-
-## Validación y pruebas
-
-Realiza la siguiente validación funcional completa.
-
-### 1. Validación de compilación
-
-Detén y reinicia Vite si modificaste `.env.local`:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-La terminal no debe mostrar errores de compilación.
-
-### 2. Validación de autenticación REST
-
-1. Inicia sesión mediante el flujo simulado existente.
-2. Navega al panel de proyectos.
-3. En DevTools > **Network**, selecciona `GET /api/projects`.
-4. Confirma que la cabecera `Authorization` contiene el token.
-
-Para validar el caso no autorizado:
-
-1. Abre DevTools > **Application** > **Local Storage**.
-2. Elimina `access_token`.
-3. Recarga la página protegida.
-4. Ejecuta una operación REST, como crear una tarea.
-
-Debe aparecer una notificación equivalente a:
-
-```text
-La sesión no es válida o ha expirado.
-```
-
-### 3. Validación de errores de formulario
-
-1. Accede a un proyecto.
-2. Deja vacío el campo de título.
-3. Selecciona **Crear tarea**.
-
-Resultado esperado:
-
-- La respuesta de red es `422`.
-- Se muestra un mensaje junto al campo de título.
-- La aplicación no se bloquea.
-- El error técnico no se muestra directamente al usuario.
-
-### 4. Validación de caché Apollo
-
-1. Inicia sesión nuevamente para restaurar el token.
-2. Abre la vista de proyectos.
-3. Navega al detalle de `p-100`.
-4. Navega a otro proyecto.
-5. Regresa a `p-100`.
-
-Resultado esperado:
-
-- Apollo conserva entidades `Project` y `Task` usando sus IDs.
-- La segunda visita puede mostrar información existente de caché antes de recibir la respuesta de red.
-- En DevTools > **Network** se observará una nueva consulta GraphQL, ya que el panel de proyectos usa `fetchPolicy: 'cache-and-network'`.
-- En Apollo DevTools, la caché debe mostrar entidades normalizadas, no copias independientes de los mismos objetos.
-
-### 5. Validación de separación de responsabilidades
-
-Comprueba que:
-
-- Los componentes no contienen URLs de API.
-- Los componentes no añaden cabeceras `Authorization`.
-- Los stores invocan funciones de servicios.
-- Los servicios REST y GraphQL gestionan detalles de transporte.
-- Los errores se convierten a `AppError`.
-- El store de UI es responsable de las notificaciones.
-- El store de estado de API es responsable de los indicadores de operación.
-
----
-
-## Resolución de problemas
-
-### Problema 1: MSW no intercepta las solicitudes y aparece `404` o `ERR_CONNECTION_REFUSED`
-
-**Síntomas**
-
-- Las solicitudes a `/api/projects` o `/graphql` fallan.
-- La consola no muestra `[MSW] Mocking enabled`.
-- En Network no aparece actividad asociada al Service Worker.
-
-**Causa**
-
-El archivo `public/mockServiceWorker.js` no fue generado, MSW se inició después de montar la aplicación o el navegador conserva un service worker anterior.
-
-**Solución**
-
-1. Genera nuevamente el archivo del worker:
+1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto (`--yes` evita la pregunta `Ok to proceed?`; el comando es igual en Windows, macOS y Linux):
 
    ```bash
-   npx msw@2.7.3 init public --save
+   npx --yes create-vite@6.4 lab05-projecthub --template vue
+   cd lab05-projecthub
+   npm install
    ```
 
-2. Comprueba que `src/main.js` ejecuta `await worker.start()` antes de `app.mount('#app')`.
-3. En Chrome DevTools > **Application** > **Service Workers**, pulsa **Unregister** para eliminar workers obsoletos.
-4. Recarga la página usando una recarga completa:
+2. Instala las cinco librerías de hoy, con Pinia incluida, en su versión exacta (`--save-exact`):
 
-   ```text
-   Ctrl+Shift+R
+   ```bash
+   npm install --save-exact pinia@3.0.3 axios@1.20.0 @apollo/client@3.13.9 graphql@16.11.0 msw@2.7.3
    ```
 
-5. Confirma que Vite se ejecuta exactamente en:
+3. Copia el trabajador de MSW a la carpeta `public` (la que Vite entrega tal cual al navegador):
 
-   ```text
-   http://127.0.0.1:5173
+   ```bash
+   npx msw init public --save
    ```
 
-### Problema 2: Apollo devuelve “No autorizado” aunque el inicio de sesión parece correcto
+4. Crea el archivo `.env` en la raíz del proyecto, junto a `package.json`. El prefijo `VITE_` hace que el navegador pueda leer la variable; por eso aquí nunca va una contraseña:
 
-**Síntomas**
+   ```dotenv
+   VITE_API_URL=/api
+   VITE_GRAPHQL_URL=/graphql
+   ```
 
-- Las consultas GraphQL muestran una notificación de sesión expirada.
-- REST funciona o el usuario parece autenticado visualmente.
-- En Network, la petición a `/graphql` no contiene una cabecera `Authorization` válida.
+5. Abre la carpeta en Visual Studio Code (`code .`). No borres todavía nada de la plantilla: su `App.vue` aún usa `HelloWorld.vue` y `assets/`.
 
-**Causa**
+**Qué debes ver:** la terminal termina con `Worker script successfully copied!` y en `public/` aparece `mockServiceWorker.js`.
 
-El flujo de autenticación del laboratorio anterior guarda el token con una clave distinta de `access_token`, o Apollo Client fue creado antes de que el token se persistiera.
+## Paso 1. Encender el servidor simulado (5 minutos)
 
-**Solución**
+**Qué vas a hacer y por qué:** MSW se mete entre la aplicación y la red y contesta como un servidor de verdad. Así practicas el 401 y el 422 sin instalar un servidor.
 
-1. Revisa Chrome DevTools > **Application** > **Local Storage**.
-2. Identifica la clave real donde el store de autenticación persiste el token.
-3. Ajusta ambos clientes para leer la misma clave:
+1. Crea `src/mocks/handlers.js`. Es el código de apoyo, **cópialo tal cual: no es el tema de hoy**:
 
    ```js
-   const token = localStorage.getItem('access_token')
+   // src/mocks/handlers.js: el servidor simulado. Cópialo tal cual: no es el tema de hoy.
+   import { http, graphql, HttpResponse } from 'msw'   // http: rutas REST; graphql: consultas
+
+   // Datos de ejemplo; __typename le dice a Apollo de qué tipo es cada objeto
+   const projects = [
+     { __typename: 'Project', id: 'p-100', name: 'Portal de clientes' },
+     { __typename: 'Project', id: 'p-200', name: 'Migración de facturación' }
+   ]
+   let tasks = [
+     { __typename: 'Task', id: 't-1', projectId: 'p-100', title: 'Diseñar pantalla de acceso' },
+     { __typename: 'Task', id: 't-2', projectId: 'p-100', title: 'Recuperar contraseña' },
+     { __typename: 'Task', id: 't-3', projectId: 'p-200', title: 'Mapear campos antiguos' }
+   ]
+
+   // ¿La petición trae la cabecera Authorization: Bearer ...?
+   const hasToken = (request) => request.headers.get('Authorization')?.startsWith('Bearer ')
+   // Respuesta 401: sin sesión válida
+   const unauthorized = () =>
+     HttpResponse.json({ message: 'La sesión no es válida o ha expirado.' }, { status: 401 })
+
+   export const handlers = [
+     // GET /api/projects: la lista, solo con token
+     http.get('/api/projects', ({ request }) =>
+       hasToken(request) ? HttpResponse.json({ data: projects }) : unauthorized()),
+
+     // POST /api/tasks: crea una tarea; sin título responde 422
+     http.post('/api/tasks', async ({ request }) => {
+       if (!hasToken(request)) return unauthorized()
+       const body = await request.json()
+       if (!body.title?.trim()) {
+         return HttpResponse.json(
+           { message: 'No fue posible validar la tarea.', errors: { title: ['El título es obligatorio.'] } },
+           { status: 422 }
+         )
+       }
+       const task = { __typename: 'Task', id: `t-${Date.now()}`, projectId: body.projectId, title: body.title.trim() }
+       tasks = [...tasks, task]   // copia nueva del arreglo, no lo muta
+       return HttpResponse.json({ data: task }, { status: 201 })
+     }),
+
+     // Consulta GraphQL ProjectTasks: un proyecto con sus tareas
+     graphql.query('ProjectTasks', ({ variables }) => {
+       const project = projects.find((p) => p.id === variables.projectId)
+       if (!project) return HttpResponse.json({ errors: [{ message: 'Proyecto no encontrado.' }] })
+       const own = tasks.filter((t) => t.projectId === project.id)
+       return HttpResponse.json({ data: { project: { ...project, tasks: own } } })
+     })
+   ]
    ```
 
-4. Cierra sesión e inicia sesión otra vez.
-5. Recarga la página y revisa que la cabecera de la consulta GraphQL sea:
+2. Reemplaza todo `src/main.js`. MSW debe estar escuchando **antes** de montar Vue; si no, las primeras peticiones se le escapan:
 
-   ```text
-   Authorization: Bearer <token>
+   ```js
+   // src/main.js: arranca MSW y después monta Vue
+   import { createApp } from 'vue'          // crea la aplicación
+   import { createPinia } from 'pinia'      // el almacén de estado del capítulo 4
+   import App from './App.vue'              // el componente raíz
+
+   async function start() {                 // async: dentro se puede esperar con await
+     if (import.meta.env.DEV) {             // solo en desarrollo, nunca en producción
+       const { setupWorker } = await import('msw/browser')     // trae MSW solo si hace falta
+       const { handlers } = await import('./mocks/handlers')   // las respuestas simuladas
+       // start: registra el trabajador; lo que no simula pasa a la red real
+       await setupWorker(...handlers).start({ onUnhandledRequest: 'bypass' })
+     }
+     createApp(App).use(createPinia()).mount('#app')   // monta Vue cuando MSW ya escucha
+   }
+
+   start()                                  // ejecuta el arranque
    ```
 
----
-
-## Limpieza
-
-1. Detén el servidor de Vite con:
+3. Arranca el servidor de desarrollo en el puerto propio de esta práctica y abre en Chrome la dirección que muestra la terminal (`http://localhost:5175/`):
 
    ```bash
-   Ctrl+C
+   npx vite --port 5175
    ```
 
-2. No elimines:
-   - `public/mockServiceWorker.js`
-   - `.env.local`
-   - `src/mocks`
-   - `src/services`
-   - Los cambios en los stores de Pinia.
+**Primero, predice:** la página todavía es la de la plantilla de Vite. ¿Dónde verías que MSW arrancó, si no cambia nada en pantalla?
 
-3. Revisa los archivos modificados:
+**Qué debes ver:** abre las herramientas del navegador (**F12**) y la pestaña **Console**: dice `[MSW] Mocking enabled.`
 
-   ```bash
-   git status
+## Paso 2. Un solo formato de error y el cliente REST (8 minutos)
+
+**Qué vas a hacer y por qué:** `AppError` es el formato único de todo fallo; el cliente REST es el único archivo que conoce Axios. Si mañana cambia el servidor, se corrige solo este archivo.
+
+1. Crea `src/services/appError.js`. La clase es la misma de la diapositiva; debajo van los dos traductores:
+
+   ```js
+   // src/services/appError.js: la forma única de los errores
+   export class AppError extends Error {                // un Error, con más datos
+     constructor({
+       message = 'No fue posible completar la operación.', // texto por defecto
+       type = 'unknown',                                // qué pasó: network, validation...
+       status = null,                                   // código HTTP, si hubo respuesta
+       details = null,                                  // errores por campo (en un 422)
+       cause = null                                     // el error original, para depurar
+     } = {}) {                                          // sin datos: todo por defecto
+       super(message)                                   // Error guarda el mensaje
+       this.name = 'AppError'                           // nombre visible en la consola
+       this.type = type                                 // con esto decide la vista
+       this.status = status                             // guarda el código
+       this.details = details                           // guarda el detalle
+       this.cause = cause                               // guarda el original
+     }
+   }
+
+   // Cada código HTTP se traduce a una palabra estable
+   const TYPES = { 401: 'authentication', 403: 'authorization', 404: 'not-found', 422: 'validation' }
+
+   // normalizeRestError: convierte un fallo de Axios en AppError
+   export function normalizeRestError(error) {
+     if (error instanceof AppError) return error        // ya traducido: igual
+     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {  // se acabó el tiempo
+       return new AppError({ type: 'timeout', message: 'El servidor tardó demasiado.', cause: error })
+     }
+     const status = error.response?.status              // ?. evita fallar si no hubo respuesta
+     if (!status) {                                     // nadie respondió: es la red
+       return new AppError({ type: 'network', message: 'No se pudo conectar con el servicio.', cause: error })
+     }
+     const data = error.response.data                   // lo que dijo el servidor
+     return new AppError({
+       message: data?.message,                          // su texto (o el de por defecto)
+       type: TYPES[status] ?? 'service',                // ?? : si no está en la tabla, 'service'
+       status,                                          // el código recibido
+       details: data?.errors ?? null,                   // errores por campo, si hay
+       cause: error                                     // el original
+     })
+   }
+
+   // normalizeGraphqlError: convierte un fallo de Apollo en AppError
+   export function normalizeGraphqlError(error) {
+     if (error.networkError) {                          // no hubo respuesta del servidor
+       return new AppError({ type: 'network', message: 'No se pudo conectar con GraphQL.', cause: error })
+     }
+     // El servidor respondió con errores: se toma el primero
+     return new AppError({ type: 'graphql', message: error.graphQLErrors?.[0]?.message, cause: error })
+   }
    ```
 
-4. Si tu flujo del curso requiere conservar el avance local, registra los cambios en la única rama permitida:
+2. Crea `src/services/restClient.js`, con los dos interceptores del tema 5.1:
 
-   ```bash
-   git add .
-   git commit -m "feat: add REST and GraphQL clients with cache and errors"
+   ```js
+   // src/services/restClient.js: el único lugar que habla REST
+   import axios from 'axios'                            // la librería HTTP
+   import { normalizeRestError } from './appError'      // el traductor de errores
+
+   const restClient = axios.create({                    // una instancia propia, no el axios global
+     baseURL: import.meta.env.VITE_API_URL,             // '/api', leído del archivo .env
+     timeout: 8000                                      // 8 segundos sin respuesta = timeout
+   })
+
+   // Interceptor de petición: corre antes de que salga cada una
+   restClient.interceptors.request.use((config) => {
+     const token = localStorage.getItem('access_token') // el token guardado al iniciar sesión
+     if (token) config.headers.Authorization = `Bearer ${token}`   // lo adjunta en la cabecera
+     return config                                      // sin esto, la petición no sale
+   })
+
+   // Interceptor de respuesta: todo fallo sale como AppError
+   restClient.interceptors.response.use(
+     (response) => response,                            // bien: pasa sin tocarla
+     (error) => Promise.reject(normalizeRestError(error))   // falla: la traduce
+   )
+
+   export async function getProjects() {               // GET /api/projects
+     const response = await restClient.get('/projects')
+     return response.data.data                          // el servidor envuelve la lista en data
+   }
+
+   export async function createTask(task) {            // POST /api/tasks
+     const response = await restClient.post('/tasks', task)
+     return response.data.data                          // la tarea creada
+   }
    ```
 
-5. Confirma que continúas en la rama requerida:
+3. Prueba el servicio sin pantalla. En **Console**, pega estas dos líneas y pulsa Enter (si Chrome no deja pegar, escribe `allow pasting` o `permitir pegar` y vuelve a pegar):
 
-   ```bash
-   git branch --show-current
+   ```js
+   const api = await import('/src/services/restClient.js')   // carga el servicio que acabas de escribir
+   await api.getProjects().catch((e) => ({ type: e.type, status: e.status, message: e.message }))   // sin sesión: muestra solo los datos del error
    ```
 
-La salida debe ser:
+**Primero, predice:** todavía no hay token. ¿Qué `type` y qué `status` tendrá el error?
 
-```text
-main
+**Qué debes ver:** `{type: 'authentication', status: 401, message: 'La sesión no es válida o ha expirado.'}`: son los datos del `AppError` que devolvió el interceptor. Ahora ejecuta `localStorage.setItem('access_token', 'demo')` y repite la segunda línea: llega un arreglo con los 2 proyectos. Deja todo como estaba con `localStorage.removeItem('access_token')`.
+
+> Lo normal es que la primera línea recargue la página: Vite prepara Axios la primera vez que alguien lo importa (en la terminal: `new dependencies optimized: axios` y `reloading`). Si la segunda línea responde `ReferenceError: api is not defined`, pega otra vez las dos líneas; desde ahí ya no se recarga.
+
+## Paso 3. GraphQL con Apollo y su caché (6 minutos)
+
+**Qué vas a hacer y por qué:** el detalle de un proyecto llega por GraphQL en un solo viaje. Con `cache-first`, Apollo responde desde su caché si ya tiene el dato y solo va a la red si le falta.
+
+> Urql es otro cliente GraphQL para Vue, más liviano; hoy usamos Apollo por su caché normalizada. Si quieres compararlos, es un buen ejercicio para después del curso.
+
+1. Crea `src/services/graphqlClient.js`:
+
+   ```js
+   // src/services/graphqlClient.js: el único lugar que habla GraphQL
+   import { ApolloClient, HttpLink, InMemoryCache, gql } from '@apollo/client/core'  // /core: sin React
+   import { normalizeGraphqlError } from './appError'
+
+   const graphqlClient = new ApolloClient({             // el cliente se crea una sola vez
+     link: new HttpLink({ uri: import.meta.env.VITE_GRAPHQL_URL }),   // camino: '/graphql'
+     cache: new InMemoryCache()                         // guarda cada objeto una vez, por tipo e id
+   })
+
+   // gql convierte el texto en una consulta; $projectId es su variable
+   const PROJECT_TASKS = gql`
+     query ProjectTasks($projectId: ID!) {
+       project(id: $projectId) {
+         id
+         name
+         tasks { id title }
+       }
+     }
+   `
+
+   export async function getProjectTasks(projectId, force = false) {
+     try {
+       const result = await graphqlClient.query({
+         query: PROJECT_TASKS,                          // qué pedir
+         variables: { projectId },                      // con qué valores
+         fetchPolicy: force ? 'network-only' : 'cache-first'   // force: ignora la caché
+       })
+       return result.data.project                       // la respuesta tiene la forma pedida
+     } catch (error) {
+       throw normalizeGraphqlError(error)               // la vista solo ve AppError
+     }
+   }
+
+   // Claves guardadas en la caché, como Project:p-100 (sin la raíz ROOT_QUERY)
+   export function cacheKeys() {
+     return Object.keys(graphqlClient.cache.extract()).filter((key) => key !== 'ROOT_QUERY')
+   }
+   ```
+
+2. Pruébalo en **Console**, una línea a la vez:
+
+   ```js
+   const gq = await import('/src/services/graphqlClient.js')   // carga el servicio GraphQL
+   await gq.getProjectTasks('p-100')                          // primera vez: va a la red
+   await gq.getProjectTasks('p-100')                          // segunda vez: ¿red o caché?
+   gq.cacheKeys()                                             // lo que guardó Apollo
+   ```
+
+**Primero, predice:** antes de la tercera línea, ¿cuántas peticiones `graphql` habrá en la pestaña **Network** (red), con el filtro **Fetch/XHR**, después de las dos llamadas: 1 o 2?
+
+**Qué debes ver:** las dos llamadas devuelven `Portal de clientes` con sus 2 tareas, pero en **Network**, con el filtro **Fetch/XHR**, hay **una sola** petición `graphql`: la segunda salió de la caché. Sin ese filtro también verías el archivo `graphqlClient.js` que acabas de importar; ese no es una consulta. `cacheKeys()` muestra `['Task:t-1', 'Task:t-2', 'Project:p-100']`: Apollo guarda cada objeto una vez, por su tipo y su `id` (normalización). Igual que con Axios, lo normal es que la primera línea recargue la página porque Vite prepara Apollo (`gq is not defined`): repite las líneas.
+
+## Paso 4. La tienda y la pantalla (12 minutos)
+
+**Qué vas a hacer y por qué:** la pantalla no llama a Axios ni a Apollo; lee la tienda, y la tienda llama a los servicios. La tienda decide con `error.type`, nunca con el texto del mensaje.
+
+1. Crea `src/stores/projects.js`. La función `addTask` la usará el formulario del paso 5:
+
+   ```js
+   // src/stores/projects.js: el estado de la pantalla; usa los servicios, nunca la red directa
+   import { defineStore } from 'pinia'                  // capítulo 4: tiendas de Pinia
+   import { ref } from 'vue'
+   import { getProjects, createTask } from '../services/restClient'
+   import { getProjectTasks, cacheKeys } from '../services/graphqlClient'
+
+   export const useProjectsStore = defineStore('projects', () => {   // tienda en forma de función
+     const projects = ref([])                           // lista que llega por REST
+     const notice = ref('')                             // aviso general para la persona
+     const loggedIn = ref(Boolean(localStorage.getItem('access_token')))   // ¿hay token?
+
+     function report(error) {                           // decide con type, no con el texto
+       if (error.type !== 'validation') notice.value = error.message   // el 422 va junto al campo
+     }
+
+     async function loadProjects() {
+       notice.value = ''                                // empieza sin aviso
+       try {
+         projects.value = await getProjects()           // REST con el token del interceptor
+       } catch (error) {
+         projects.value = []                            // sin datos que mostrar
+         report(error)
+       }
+     }
+
+     function login() {                                 // sesión simulada: guarda un token
+       localStorage.setItem('access_token', 'demo-123')
+       loggedIn.value = true
+       loadProjects()
+     }
+
+     function logout() {                                // borra el token
+       localStorage.removeItem('access_token')
+       loggedIn.value = false
+     }
+
+     const selected = ref(null)                         // proyecto abierto, llega por GraphQL
+     const cacheEntries = ref([])                       // lo que guarda Apollo
+
+     async function openProject(projectId, force = false) {
+       try {
+         selected.value = await getProjectTasks(projectId, force)
+         cacheEntries.value = cacheKeys()               // refresca la vista de la caché
+       } catch (error) {
+         report(error)
+       }
+     }
+
+     async function addTask(title) {
+       try {
+         await createTask({ projectId: selected.value.id, title })   // REST: POST /api/tasks
+         await openProject(selected.value.id, true)     // la caché quedó vieja: pide a la red
+       } catch (error) {
+         report(error)
+         throw error                                    // el formulario decide qué mostrar
+       }
+     }
+
+     return { projects, notice, loggedIn, loadProjects, login, logout,
+       selected, cacheEntries, openProject, addTask }
+   })
+   ```
+
+2. Crea `src/components/ProjectDetail.vue`:
+
+   ```vue
+   <!-- src/components/ProjectDetail.vue: el proyecto abierto y la caché de Apollo -->
+   <script setup>
+   import { useProjectsStore } from '../stores/projects'
+
+   const store = useProjectsStore()                     // la misma tienda que usa App.vue
+   </script>
+
+   <template>
+     <!-- solo aparece cuando hay un proyecto abierto -->
+     <section v-if="store.selected">
+       <h2>{{ store.selected.name }}</h2>
+       <ul>
+         <li v-for="task in store.selected.tasks" :key="task.id">{{ task.title }}</li>
+       </ul>
+       <h3>Caché de Apollo: {{ store.cacheEntries.length }} entradas</h3>
+       <!-- cada clave es tipo:id, y ninguna se repite -->
+       <p><code>{{ store.cacheEntries.join(' · ') }}</code></p>
+     </section>
+   </template>
+   ```
+
+3. Reemplaza todo `src/App.vue`. Los estilos del final son de apoyo, cópialos tal cual:
+
+   ```vue
+   <!-- src/App.vue: la pantalla principal; no conoce direcciones ni cabeceras -->
+   <script setup>
+   import { onMounted } from 'vue'                      // corre algo al aparecer en pantalla
+   import { useProjectsStore } from './stores/projects'
+   import ProjectDetail from './components/ProjectDetail.vue'
+
+   const store = useProjectsStore()                     // la tienda del capítulo 4
+   onMounted(() => store.loadProjects())                // al abrir, pide la lista
+   </script>
+
+   <template>
+     <main>
+       <h1>ProjectHub</h1>
+       <!-- v-if / v-else: un solo botón según haya sesión o no -->
+       <button v-if="store.loggedIn" @click="store.logout">Cerrar sesión</button>
+       <button v-else @click="store.login">Iniciar sesión</button>
+       <!-- role="alert": el lector de pantalla anuncia el aviso -->
+       <p v-if="store.notice" role="alert">{{ store.notice }}</p>
+       <ul>
+         <li v-for="project in store.projects" :key="project.id">
+           <button @click="store.openProject(project.id)">{{ project.name }}</button>
+         </li>
+       </ul>
+       <ProjectDetail />
+     </main>
+   </template>
+
+   <style>
+   /* Estilos mínimos. Cópialos tal cual: no son el tema de hoy. */
+   main { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+   [role='alert'] { color: #b00020; }
+   button { margin: 0.2rem; }
+   </style>
+   ```
+
+4. Borra de la plantilla lo que ya no usa el nuevo `App.vue`: `src/components/HelloWorld.vue`, la carpeta `src/assets/` y `src/style.css` (en Visual Studio Code: clic derecho y **Delete**).
+
+5. Recarga con **F5**, para empezar con la caché vacía.
+
+**Primero, predice:** al abrir no hay token. ¿Qué verás antes de pulsar algún botón?
+
+**Qué debes ver:**
+
+- En rojo, `La sesión no es válida o ha expirado.` Pulsa **Iniciar sesión**: el aviso se va y salen los 2 proyectos. En **Network**, la petición `projects` lleva en **Headers** `Authorization: Bearer demo-123`. La puso el interceptor, no la pantalla.
+- En **Console** sale en rojo `Failed to load resource: ... 401 (Unauthorized)`: es Chrome anotando el 401 que acabas de provocar, no un fallo de tu código.
+- Abre **Portal de clientes**, luego **Migración de facturación** y vuelve a **Portal de clientes**: en **Network** (**Fetch/XHR**) solo **2** peticiones `graphql` y el panel dice `Caché de Apollo: 5 entradas`, con `Project:p-100` una sola vez.
+
+## Paso 5. Crear tareas: el 422 junto al campo y el 401 como aviso (7 minutos)
+
+**Qué vas a hacer y por qué:** el mismo `AppError` llega con dos `type` distintos y la pantalla decide dónde mostrarlo. Al crear una tarea, la caché de Apollo queda vieja; por eso `addTask` vuelve a pedir el proyecto con `network-only`.
+
+1. Crea `src/components/TaskForm.vue`:
+
+   ```vue
+   <!-- src/components/TaskForm.vue: crea una tarea y muestra el 422 junto al campo -->
+   <script setup>
+   import { ref } from 'vue'
+   import { useProjectsStore } from '../stores/projects'
+
+   const store = useProjectsStore()
+   const title = ref('')                                // lo que escribe la persona
+   const titleError = ref('')                           // mensaje debajo del campo
+
+   async function submit() {
+     titleError.value = ''                              // limpia el error anterior
+     try {
+       await store.addTask(title.value)                 // la tienda llama al servicio REST
+       title.value = ''                                 // éxito: vacía el campo
+     } catch (error) {
+       // Decide con type: solo la validación se queda junto al campo
+       if (error.type === 'validation') titleError.value = error.details?.title?.[0] ?? error.message
+     }
+   }
+   </script>
+
+   <template>
+     <!-- .prevent: evita que el navegador recargue la página al enviar -->
+     <form @submit.prevent="submit">
+       <label for="task-title">Nueva tarea</label>
+       <input id="task-title" v-model="title" :aria-invalid="Boolean(titleError)" />
+       <button type="submit">Crear tarea</button>
+       <p v-if="titleError" role="alert">{{ titleError }}</p>
+     </form>
+   </template>
+   ```
+
+2. En `src/components/ProjectDetail.vue`, agrega `import TaskForm from './TaskForm.vue'` debajo del `import` de la tienda, y `<TaskForm />` justo después de `</ul>`. Guarda y abre **Portal de clientes**.
+
+**Primero, predice:** con el campo vacío pulsas **Crear tarea**. ¿El mensaje sale arriba, como aviso general, o debajo del campo?
+
+**Qué debes ver:**
+
+- Campo vacío: debajo del campo, `El título es obligatorio.`; en **Network**, `tasks` con estado **422**, y en **Console** la línea roja `Failed to load resource: ... 422`, provocada a propósito. La aplicación sigue respondiendo.
+- Escribe `Probar en Chrome` y crea la tarea: aparece en la lista, `tasks` responde **201** y sale una petición `graphql` nueva, la del `network-only`.
+- Pulsa **Cerrar sesión** y crea otra tarea: arriba, `La sesión no es válida o ha expirado.`, y `tasks` con **401**. La lista y el proyecto siguen en pantalla porque `logout` solo borra el token; quien rechaza es el servidor. Pulsa **Iniciar sesión** antes de seguir.
+
+> Si guardas `handlers.js` o `main.js`, Vite recarga la página y las tareas que creaste desaparecen: los datos simulados viven en memoria. El token sigue, porque está en `localStorage`.
+
+<details>
+<summary>Código final de ProjectDetail.vue</summary>
+
+```vue
+<!-- src/components/ProjectDetail.vue: el proyecto abierto y la caché de Apollo -->
+<script setup>
+import { useProjectsStore } from '../stores/projects'
+import TaskForm from './TaskForm.vue'
+
+const store = useProjectsStore()                     // la misma tienda que usa App.vue
+</script>
+
+<template>
+  <!-- solo aparece cuando hay un proyecto abierto -->
+  <section v-if="store.selected">
+    <h2>{{ store.selected.name }}</h2>
+    <ul>
+      <li v-for="task in store.selected.tasks" :key="task.id">{{ task.title }}</li>
+    </ul>
+    <TaskForm />
+    <h3>Caché de Apollo: {{ store.cacheEntries.length }} entradas</h3>
+    <!-- cada clave es tipo:id, y ninguna se repite -->
+    <p><code>{{ store.cacheEntries.join(' · ') }}</code></p>
+  </section>
+</template>
 ```
 
-## Resumen
+</details>
 
-En este laboratorio implementaste una capa de datos escalable para ProjectHub:
+## Paso 6. Comprobar la separación y limpiar (2 minutos)
 
-- Axios consume endpoints REST con autenticación, tiempo de espera e interceptores.
-- Los fallos REST y GraphQL se normalizan mediante el contrato `AppError`.
-- Apollo Client consume GraphQL con autenticación y caché normalizada por `id`.
-- Los stores de Pinia centralizan las operaciones, actualizan el estado de la aplicación y notifican errores mediante el store de UI.
-- Las vistas se enfocan en la presentación, sin conocer URLs, cabeceras ni detalles de transporte.
-- MSW permite desarrollar y validar la SPA sin iniciar una API real ni ocupar el puerto `3000`.
+1. Detén el servidor con `Ctrl+C` y busca direcciones, cabeceras o Axios en los componentes. Este comando cambia según el sistema:
 
-Como siguiente paso, esta arquitectura puede extenderse con mutaciones GraphQL, invalidación selectiva de caché, reintentos controlados, telemetría de errores y pruebas automatizadas de servicios y stores.
+   **Windows (PowerShell)**
+
+   ```powershell
+   Select-String -Path src\App.vue, src\components\*.vue -Pattern '/api', 'Authorization', 'axios'
+   ```
+
+   **macOS y Linux**
+
+   ```bash
+   grep -nE "/api|Authorization|axios" src/App.vue src/components/*.vue
+   ```
+
+**Qué debes ver:** ninguna línea. Las direcciones viven en `.env`, las cabeceras en `restClient.js` y la pantalla solo habla con la tienda.
+
+2. Si quieres liberar espacio, borra la carpeta `node_modules`; `npm install` la recrea.
+
+## Problemas frecuentes
+
+| Lo que ves | Por qué pasa | Arreglo |
+|---|---|---|
+| En **Console**: `[MSW] Failed to register a Service Worker ... 404` | `mockServiceWorker.js` no está en `public/` | Desde la carpeta del proyecto: `npx msw init public --save` y recarga con `Ctrl+Shift+R` |
+| La lista nunca llega y en **Network** `projects` va a `/projects` sin `/api` | Vite no leyó `.env`: lo creaste con el servidor encendido o con otro nombre | Revisa que se llame `.env`, junto a `package.json`, y reinicia `npx vite --port 5175` |
+| En **Console**, una sola vez: `Failed to update a ServiceWorker ... mockServiceWorker.js: Not found` | Chrome revisó el trabajador de MSW justo mientras Vite recargaba la página | Recarga con `Ctrl+Shift+R`; MSW sigue respondiendo |
+| En **Console**: `ReferenceError: api is not defined` (o `gq is not defined`) | La primera importación hizo que Vite preparara Axios o Apollo y recargara la página; lo que habías definido se perdió | Pega otra vez las líneas del paso |
+| `Failed to fetch dynamically imported module` o `504 (Outdated Optimize Dep)` | Vite preparó una librería nueva (Axios o Apollo) mientras la página estaba abierta | Recarga la página |
+| `store.openProject is not a function` o una pantalla que no cambia | Cambiaste la tienda con la página abierta y sigue viva la tienda anterior | Recarga con `F5` |
+| Chrome no deja pegar en **Console** | Protección de Chrome contra código pegado | Escribe `allow pasting` (o `permitir pegar`) y pega otra vez |
+| Error de Apollo al usar `fetchPolicy: 'cache-and-network'` | `client.query` responde una sola vez y no admite esa política; es de `useQuery` | Usa `cache-first` o `network-only`, como en esta guía |
+| Vite dice `Port 5175 is in use, trying another one...` | Otra práctica ocupa ese puerto | Usa la dirección que muestra la terminal |
+| `npm create vite@6.4 lab05-projecthub -- --template vue` se queda preguntando el marco | En PowerShell, `npm` se come el `--` y `--template` no llega | Usa `npx --yes create-vite@6.4 lab05-projecthub --template vue`, que no necesita `--` |
+| `npm run dev -- --port 5175` arranca en el 5173 | En PowerShell se pierde el `--` y Vite no recibe el puerto | Usa `npx vite --port 5175` |
+| `Failed to resolve import "./components/HelloWorld.vue"` | Borraste la plantilla antes de reemplazar `App.vue` | Reemplaza `App.vue` (paso 4) o restaura el archivo |
+
+## Ejercicios de reserva
+
+**Básico.** Agrega en `App.vue` un botón que abra el proyecto `p-999`, que no existe. ¿Qué aviso sale y qué `type` lo produjo?
+
+<details>
+<summary>Solución</summary>
+
+```vue
+<button @click="store.openProject('p-999')">Proyecto inexistente</button>   <!-- id que el servidor no conoce -->
+```
+
+Sale `Proyecto no encontrado.`: el servidor GraphQL respondió con `errors` y `normalizeGraphqlError` lo tradujo a `type: 'graphql'`.
+
+</details>
+
+**Medio.** Haz que la lista tarde 2 segundos y que el cliente espere solo 1. ¿Qué aviso ves ahora?
+
+<details>
+<summary>Solución</summary>
+
+En `handlers.js`, importa `delay` y espera antes de responder; en `restClient.js`, cambia `timeout: 8000` por `timeout: 1000`:
+
+```js
+import { http, graphql, HttpResponse, delay } from 'msw'   // delay: pausa la respuesta simulada
+http.get('/api/projects', async ({ request }) => {         // async para poder esperar
+  await delay(2000)                                        // tarda 2 segundos
+  return hasToken(request) ? HttpResponse.json({ data: projects }) : unauthorized()
+}),
+```
+
+Sale `El servidor tardó demasiado.` (`type: 'timeout'`). Deja los valores como estaban al terminar.
+
+</details>
+
+**Avanzado.** Con un TTL (time to live, tiempo de vida) de 30 segundos, haz que `loadProjects` no vuelva a pedir la lista si la pidió hace menos de 30 segundos, salvo que reciba `force` en `true`.
+
+<details>
+<summary>Solución</summary>
+
+```js
+let lastFetchedAt = 0                                     // cuándo llegó la lista por última vez
+const TTL = 30_000                                        // 30 segundos en milisegundos
+
+async function loadProjects(force = false) {
+  if (!force && Date.now() - lastFetchedAt < TTL) return  // aún fresca: no pide
+  notice.value = ''
+  try {
+    projects.value = await getProjects()
+    lastFetchedAt = Date.now()                            // marca la hora de llegada
+  } catch (error) {
+    projects.value = []
+    report(error)
+  }
+}
+```
+
+En `login()`, llama `loadProjects(true)`: al iniciar sesión siempre se pide de nuevo.
+
+</details>
+
+## Control de cambios
+
+| Versión | Fecha | Autor | Cambio |
+|---|---|---|---|
+| 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI desde carpeta vacía en Windows y Linux. `npx --yes create-vite@6.4` y `npx vite --port 5175` (en PowerShell `npm` pierde el `--`). Axios 1.20.0 en lugar de 1.12.2 (`npm audit` marcaba una vulnerabilidad alta). Borrado de la plantilla movido al paso 4. Consola del paso 2 muestra `type`, `status` y `message`. Filtro **Fetch/XHR** para contar peticiones `graphql`. Orden real de `cacheKeys()`. Recarga de Vite anunciada como normal. Rótulos por sistema en el paso 6. Notas de `__typename`, `cache.extract()`, `import.meta.env.DEV`, Urql y del `logout`. Tiempos de los pasos 3, 4 y 6 ajustados (total 46). Tres filas nuevas en Problemas frecuentes |
+| 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía rehecha desde carpeta vacía con `npm create vite@6.4`, sin clonar ni depender del laboratorio anterior. Servidor simulado relativo con `__typename` para que Apollo normalice. `cache-first` y `network-only` en lugar de `cache-and-network`. Un solo `AppError`. Panel de caché visible. Predicción y resultado por paso, ejercicios de reserva y carpeta `solucion/` |
