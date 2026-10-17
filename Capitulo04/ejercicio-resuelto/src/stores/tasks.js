@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'                  // crea tiendas
 import { computed, ref } from 'vue'                  // piezas del capítulo 1
-import { api } from '../api.js'                      // API simulada
+import { api } from '@/api.js'                       // API simulada (@ = src)
 import { useApiStatusStore } from './apiStatus.js'   // carga y errores en un solo lugar
 import { useUiStore } from './ui.js'                 // el filtro vive en la tienda de interfaz
 

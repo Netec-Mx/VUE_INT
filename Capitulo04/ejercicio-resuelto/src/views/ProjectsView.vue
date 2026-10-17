@@ -1,10 +1,10 @@
 <script setup>
 import { onMounted } from 'vue'                            // ciclo de vida (capítulo 1)
 import { storeToRefs } from 'pinia'                        // lo que se lee, con storeToRefs
-import { useApiStatusStore } from '../stores/apiStatus.js' // carga y errores
-import { useProjectsStore } from '../stores/projects.js'   // proyectos
-import { useTasksStore } from '../stores/tasks.js'         // tareas
-import { useUiStore } from '../stores/ui.js'               // tema, filtro y avisos
+import { useApiStatusStore } from '@/stores/apiStatus.js'  // carga y errores
+import { useProjectsStore } from '@/stores/projects.js'    // proyectos
+import { useTasksStore } from '@/stores/tasks.js'          // tareas
+import { useUiStore } from '@/stores/ui.js'                // tema, filtro y avisos
 
 const projects = useProjectsStore()                        // cada tienda, una vez
 const tasks = useTasksStore()

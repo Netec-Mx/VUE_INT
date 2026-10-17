@@ -1,14 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router' // repaso del capítulo 3
-import { useAuthStore } from './stores/auth.js'             // la tienda de sesión
+import { useAuthStore } from '@/stores/auth.js'             // la tienda de sesión
 
 const router = createRouter({
-  history: createWebHistory(),                              // direcciones limpias, sin #
+  history: createWebHistory(import.meta.env.BASE_URL),      // direcciones limpias, sin #
   routes: [
     { path: '/', redirect: '/proyectos' },                  // la raíz lleva a proyectos
-    { path: '/login', name: 'login', component: () => import('./views/LoginView.vue') }, // carga perezosa
+    { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') }, // carga perezosa
     {
       path: '/proyectos',
-      component: () => import('./views/ProjectsView.vue'),  // se descarga solo al visitarla
+      component: () => import('@/views/ProjectsView.vue'),  // se descarga solo al visitarla
       meta: { requiresAuth: true },                         // exige sesión
     },
   ],

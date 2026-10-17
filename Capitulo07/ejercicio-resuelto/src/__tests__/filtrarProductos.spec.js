@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'               // agrupar, declarar un caso y comprobar
-import { filtrarProductos } from './filtrarProductos.js'   // la función que se prueba
+import { filtrarProductos } from '../utils/filtrarProductos.js' // la función que se prueba
 
 const productos = [                                         // datos fijos: siempre los mismos
   { id: 1, nombre: 'Mouse inalámbrico' },

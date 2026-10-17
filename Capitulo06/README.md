@@ -41,21 +41,30 @@ Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas d
 
 ## Preparación (5 minutos)
 
-1. Abre una terminal en una carpeta tuya de prácticas (por ejemplo, `labs-vue` en tus documentos) y crea el proyecto con Vite 6.4. El comando es el mismo en Windows (PowerShell), macOS y Linux; `--yes` evita la pregunta `Ok to proceed?`:
+1. Abre una terminal en una carpeta tuya de prácticas (por ejemplo, `labs-vue` en tus documentos) y crea el proyecto con **create-vue**, la herramienta oficial de Vue que viste en el capítulo 0. El comando es el mismo en Windows (PowerShell), macOS y Linux; `--yes` evita la pregunta `Ok to proceed?`:
 
    ```bash
-   npx --yes create-vite@6.4 catalogo-pro --template vue
+   npx --yes create-vue@3.16.4 catalogo-pro --bare --router
    cd catalogo-pro
    npm install
-   npm install vue-router@4.5.0
    npm install -D rollup-plugin-visualizer@5.14.0
    ```
 
-   `vue-router` es el enrutador del capítulo 3; `rollup-plugin-visualizer` dibuja el mapa del paquete (tema 6.2).
+   - `--router` agrega Vue Router (capítulo 3) ya conectado a la aplicación; `--bare` deja el proyecto sin páginas de ejemplo. Con las dos opciones create-vue no hace preguntas.
+   - La versión va fija: 3.16.4 crea el proyecto con Vite 6, que funciona en Node 20 y 22. Las versiones más nuevas piden Node 22.18 o superior.
+   - `rollup-plugin-visualizer` dibuja el mapa del paquete (tema 6.2). Es lo único que se instala aparte.
 
-2. Abre la carpeta en VS Code (`code .`) y **borra** tres archivos de la plantilla que no se usan: `src/style.css`, `src/components/HelloWorld.vue` y `src/assets/vue.svg`.
+2. Abre la carpeta en VS Code (`code .`) y mira lo que trae el proyecto. No hay que borrar nada:
 
-3. En `index.html`, cambia `lang="en"` por `lang="es"` y el título `Vite + Vue` por `Catálogo Pro`.
+   | Archivo | Qué hace | Qué haces con él |
+   |---|---|---|
+   | `src/main.js` | Crea la aplicación y activa el enrutador con `app.use(router)` | Nada: se queda tal cual |
+   | `src/router/index.js` | Enrutador con la lista de rutas vacía | Lo reemplazas en el paso 1 |
+   | `src/App.vue` | Componente raíz con un título `You did it!` | Lo reemplazas en el paso 1 |
+   | `vite.config.js` | Plugin de Vue, panel Vue DevTools en desarrollo y el atajo `@` para `src` | Lo reemplazas en el paso 3 |
+   | `public/favicon.ico` | Logotipo de Vue | Lo usas en el paso opcional |
+
+3. En `index.html`, cambia `lang=""` por `lang="es"` y el título `Vite App` por `Catálogo Pro`.
 
 **Qué debes ver:** la terminal termina sin errores (`added ... packages`). Puede salir un aviso amarillo `npm warn`: no impide seguir.
 
@@ -83,26 +92,18 @@ Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas d
    }
    ```
 
-2. Reemplaza todo `src/main.js` por este:
+2. `src/main.js` no se toca: create-vue ya lo dejó con `app.use(router)`, que activa el enrutador.
 
-   ```js
-   import { createApp } from 'vue'                // crea la aplicación
-   import App from './App.vue'                    // componente raíz
-   import router from './router.js'               // enrutador (capítulo 3)
-
-   createApp(App).use(router).mount('#app')       // activa el enrutador y dibuja en <div id="app">
-   ```
-
-3. Crea `src/router.js`. Por ahora importa las tres vistas de entrada (así viene el proyecto):
+3. Reemplaza todo `src/router/index.js` por este. Por ahora importa las tres vistas de entrada (así suele llegar un proyecto real):
 
    ```js
    import { createRouter, createWebHistory } from 'vue-router'    // funciones del enrutador
-   import CatalogoView from './views/CatalogoView.vue'             // la vista de entrada sí va en el paquete inicial
-   import ReportesView from './views/ReportesView.vue'             // hoy viaja en el paquete inicial
-   import AdminView from './views/AdminView.vue'                   // también
+   import CatalogoView from '../views/CatalogoView.vue'            // la vista de entrada sí va en el paquete inicial
+   import ReportesView from '../views/ReportesView.vue'            // hoy viaja en el paquete inicial
+   import AdminView from '../views/AdminView.vue'                  // también
 
    export default createRouter({
-     history: createWebHistory(),                                  // direcciones limpias, sin #
+     history: createWebHistory(import.meta.env.BASE_URL),          // direcciones limpias, sin #; BASE_URL vale '/'
      routes: [
        { path: '/', component: CatalogoView },                     // se necesita al abrir la página
        { path: '/reportes', component: ReportesView },
@@ -137,7 +138,7 @@ Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas d
    </style>
    ```
 
-5. Crea las dos vistas secundarias. Cópialas tal cual, no son el tema de hoy: solo existen para que haya rutas que no se ven al entrar. `src/views/AdminView.vue`:
+5. Crea la carpeta `src/views` y en ella las dos vistas secundarias. Cópialas tal cual, no son el tema de hoy: solo existen para que haya rutas que no se ven al entrar. `src/views/AdminView.vue`:
 
    ```html
    <template>
@@ -254,13 +255,13 @@ Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas d
    npm run build
    ```
 
-   **Qué debes ver:** en `dist/assets` aparece **un solo** archivo `index-....js` de unos 94 kB (unos 37 kB en la columna `gzip`, que es lo que viaja por la red), más un `index-....css` pequeño con los estilos. Todo el JavaScript llega junto. Así salió en la prueba (las letras del nombre cambian en cada compilación):
+   **Qué debes ver:** en `dist/assets` aparece **un solo** archivo `index-....js` de unos 96 kB (unos 38 kB en la columna `gzip`, que es lo que viaja por la red), más un `index-....css` pequeño con los estilos. Todo el JavaScript llega junto. Así salió en la prueba (las letras del nombre cambian en cada compilación):
 
    ```text
-   dist/index.html                  0.46 kB │ gzip:  0.30 kB
+   dist/index.html                  0.44 kB │ gzip:  0.29 kB
    dist/assets/index-2SW5xH-G.css   0.43 kB │ gzip:  0.27 kB
-   dist/assets/index-65xXZGGj.js   94.10 kB │ gzip: 37.16 kB
-   ✓ built in 8.93s
+   dist/assets/index-B1z2xwd-.js   96.47 kB │ gzip: 37.71 kB
+   ✓ built in 5.82s
    ```
 
 2. Sirve la compilación con `npm run preview`. Queda corriendo en esa terminal hasta que la detengas. Abre una **ventana de incógnito** de Chrome (`Ctrl + Mayús + N`; así las extensiones no alteran la medida) en `http://localhost:4173`.
@@ -298,21 +299,29 @@ Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas d
 
 Si `npm run preview` sigue abierto desde el paso 2, detenlo con `Ctrl + C` en su terminal.
 
-1. Reemplaza todo `vite.config.js` por este. El mapa solo se genera cuando lo pides, para no alargar cada compilación:
+1. Reemplaza todo `vite.config.js` por este. Conserva lo que trajo create-vue y agrega el visualizador. El mapa solo se genera cuando lo pides, para no alargar cada compilación:
 
    ```js
+   import { fileURLToPath, URL } from 'node:url'                // convierte una dirección de archivo en ruta del disco
    import { defineConfig } from 'vite'                          // ayuda para escribir la configuración
    import vue from '@vitejs/plugin-vue'                         // enseña a Vite a leer archivos .vue
+   import vueDevTools from 'vite-plugin-vue-devtools'           // panel Vue DevTools (lo trajo create-vue)
    import { visualizer } from 'rollup-plugin-visualizer'        // dibuja el mapa del paquete
 
    export default defineConfig(({ mode }) => ({                 // mode vale 'analisis' con npm run build:analisis
      plugins: [
        vue(),                                                   // plugin de Vue
+       vueDevTools(),                                           // solo actúa con npm run dev: no entra en dist
        mode === 'analisis' && visualizer({                      // el mapa solo se genera si se pide
          filename: 'estadisticas.html',                         // archivo del mapa, en la carpeta del proyecto
          gzipSize: true                                         // muestra también el peso comprimido
        })
      ],
+     resolve: {
+       alias: {
+         '@': fileURLToPath(new URL('./src', import.meta.url))  // '@' en un import significa la carpeta src
+       }
+     },
    }))
    ```
 
@@ -330,11 +339,11 @@ Si `npm run preview` sigue abierto desde el paso 2, detenlo con `Ctrl + C` en su
 
 **Qué vas a hacer y por qué:** quien abre el catálogo no necesita Reportes ni Administración. Con `import()` esas vistas viajan en fragmentos aparte que se descargan al visitarlas. Y con `manualChunks` Vue viaja en su propio archivo: cambia poco, así que se queda en la caché del navegador entre una publicación y otra.
 
-1. En `src/router.js`, borra las dos líneas `import ReportesView ...` e `import AdminView ...`, y reemplaza las dos rutas por estas:
+1. En `src/router/index.js`, borra las dos líneas `import ReportesView ...` e `import AdminView ...`, y reemplaza las dos rutas por estas:
 
    ```js
-       { path: '/reportes', component: () => import('./views/ReportesView.vue') }, // se descarga al visitar la ruta
-       { path: '/admin', component: () => import('./views/AdminView.vue') }        // igual: fragmento aparte
+       { path: '/reportes', component: () => import('../views/ReportesView.vue') }, // se descarga al visitar la ruta
+       { path: '/admin', component: () => import('../views/AdminView.vue') }        // igual: fragmento aparte
    ```
 
 2. En `vite.config.js`, agrega esta línea encima de `export default`:
@@ -345,7 +354,7 @@ Si `npm run preview` sigue abierto desde el paso 2, detenlo con `Ctrl + C` en su
 
    `[\\/]` acepta cualquiera de las dos barras: `\` en las rutas de Windows y `/` en las de macOS y Linux. Así el patrón funciona en los tres sistemas.
 
-3. En el mismo archivo, entre el `],` que cierra `plugins` y el `}))` final, agrega el bloque `build`:
+3. En el mismo archivo, entre el `},` que cierra `resolve` y el `}))` final, agrega el bloque `build`:
 
    ```js
      build: {
@@ -365,7 +374,7 @@ Si `npm run preview` sigue abierto desde el paso 2, detenlo con `Ctrl + C` en su
 
 4. Ejecuta `npm run build`.
 
-**Qué debes ver:** cuatro archivos: `vue-....js` (el grueso, unos 90 kB), `index-....js` (tu código, unos 5 kB), `ReportesView-....js` y `AdminView-....js` (menos de 1 kB cada uno). Además sale `index-....css` con los estilos. Con `npm run preview`, en la pestaña **Network** (Red) de Chrome, `ReportesView-....js` se descarga solo cuando entras a Reportes. Al terminar de mirar, detén `npm run preview` con `Ctrl + C`.
+**Qué debes ver:** cuatro archivos: `vue-....js` (el grueso, unos 93 kB), `index-....js` (tu código, unos 5 kB), `ReportesView-....js` y `AdminView-....js` (menos de 1 kB cada uno). Además sale `index-....css` con los estilos. Con `npm run preview`, en la pestaña **Network** (Red) de Chrome, `ReportesView-....js` se descarga solo cuando entras a Reportes. Al terminar de mirar, detén `npm run preview` con `Ctrl + C`.
 
 ## Paso 5. Memoizar el filtro con computed (4 minutos)
 
@@ -510,14 +519,14 @@ Si `npm run preview` sigue abierto desde el paso 2, detenlo con `Ctrl + C` en su
 1. Detén el servidor (`Ctrl + C`), ejecuta `npm run build` y `npm run preview`, y repite en incógnito Lighthouse y **Contar nodos**, en las mismas condiciones del paso 2.
 2. Llena la columna **Después** de `docs/performance-report.md`, anota los cambios del paso 4 al 7 y escribe una conclusión de dos líneas.
 
-**Qué debes ver:** menos JavaScript propio en la carga inicial (unos 5 kB en lugar de 94 kB en un solo archivo), unos 150 nodos en lugar de más de 14.000, 18 filas en lugar de 2.000, TBT más bajo (en la prueba, de 50 ms a 0 ms) y el aviso de DOM excesivo fuera de Lighthouse. Los números exactos dependen de tu equipo; lo que importa es la comparación justa.
+**Qué debes ver:** menos JavaScript propio en la carga inicial (unos 6 kB en lugar de 96 kB en un solo archivo), unos 150 nodos en lugar de más de 14.000, 18 filas en lugar de 2.000, TBT más bajo (en la prueba, de 50 ms a 0 ms) y el aviso de DOM excesivo fuera de Lighthouse. Los números exactos dependen de tu equipo; lo que importa es la comparación justa.
 
 ## Paso opcional. Imágenes con tamaño declarado (3 minutos)
 
-En `App.vue`, antes de `<strong>Catálogo Pro</strong>`, agrega el logotipo que trae la plantilla en `public/`:
+En `App.vue`, antes de `<strong>Catálogo Pro</strong>`, agrega el logotipo de Vue que trajo create-vue en `public/`:
 
 ```html
-<img src="/vite.svg" alt="" width="28" height="28" />   <!-- width y height reservan el espacio: la página no salta -->
+<img src="/favicon.ico" alt="" width="28" height="28" />   <!-- width y height reservan el espacio: la página no salta -->
 ```
 
 `alt=""` indica que es decorativa. No lleva `loading="lazy"`: está arriba y se ve al entrar. `lazy` es para imágenes que quedan debajo del borde de la pantalla; en la imagen principal retrasaría el LCP.
@@ -547,7 +556,8 @@ npx vite --port 5176     # arranca la aplicación en http://localhost:5176
 | `npm error Missing script: "build:analisis"` | Falta el script en `package.json` | Haz el paso 3.2 y revisa la coma al final de la línea |
 | Lighthouse: `ERR_CONNECTION_REFUSED` o no carga la página | `npm run preview` no está corriendo | Arráncalo y usa el puerto que muestra (4173) |
 | `Port 5173 is in use, trying another one...` o `Port 4173 is in use` | Otro servidor (`dev` o `preview`) quedó abierto | Usa la dirección que muestra la terminal, o cierra el otro con `Ctrl + C` |
-| En PowerShell, `npm create vite@6.4 catalogo-pro -- --template vue` pregunta el marco (*framework*) o se queda esperando | PowerShell se come el `--` y la plantilla no llega a create-vite | Usa el comando de la preparación: `npx --yes create-vite@6.4 catalogo-pro --template vue` |
+| create-vue pregunta `Project name`, `Add TypeScript?` y más, o se queda esperando | Faltan las opciones o se escribieron detrás de un `--`, que PowerShell se come | Usa el comando de la preparación tal cual: `npx --yes create-vue@3.16.4 catalogo-pro --bare --router` |
+| `npm warn EBADENGINE` y luego Vite no arranca | Se usó `create-vue@latest`: las versiones nuevas traen Vite 7, que pide Node 20.19 o 22.12 en adelante | Borra la carpeta y créala con `create-vue@3.16.4`, o actualiza Node |
 | Pulsas **Contar nodos** o **Vender 1** y no cambia nada, justo después de guardar cambios con la pestaña cerrada | En la prueba en Windows pasó solo en la primera carga de la página tras cambiar archivos sin la pestaña abierta | Recarga con `F5`. Con la pestaña abierta mientras editas no pasa |
 | Lighthouse da 100 antes y después | El equipo es rápido y la página es pequeña | Compara TBT, el tamaño del DOM y los nodos: ahí está la diferencia |
 | La lista virtual muestra huecos o filas encimadas | `ALTO` no coincide con `height: 56px` de `.fila` | Deja los dos en 56 |
@@ -616,18 +626,18 @@ function precargar() { import('./views/ReportesView.vue') }          // pide el 
 ## Código final de los archivos que cambiaron
 
 <details>
-<summary>src/router.js</summary>
+<summary>src/router/index.js</summary>
 
 ```js
 import { createRouter, createWebHistory } from 'vue-router'    // funciones del enrutador
-import CatalogoView from './views/CatalogoView.vue'             // la vista de entrada sí va en el paquete inicial
+import CatalogoView from '../views/CatalogoView.vue'            // la vista de entrada sí va en el paquete inicial
 
 export default createRouter({
-  history: createWebHistory(),                                  // direcciones limpias, sin #
+  history: createWebHistory(import.meta.env.BASE_URL),          // direcciones limpias, sin #; BASE_URL vale '/'
   routes: [
     { path: '/', component: CatalogoView },                     // se necesita al abrir la página
-    { path: '/reportes', component: () => import('./views/ReportesView.vue') }, // se descarga al visitar la ruta
-    { path: '/admin', component: () => import('./views/AdminView.vue') }        // igual: fragmento aparte
+    { path: '/reportes', component: () => import('../views/ReportesView.vue') }, // se descarga al visitar la ruta
+    { path: '/admin', component: () => import('../views/AdminView.vue') }        // igual: fragmento aparte
   ]
 })
 ```
@@ -638,8 +648,10 @@ export default createRouter({
 <summary>vite.config.js</summary>
 
 ```js
+import { fileURLToPath, URL } from 'node:url'                // convierte una dirección de archivo en ruta del disco
 import { defineConfig } from 'vite'                          // ayuda para escribir la configuración
 import vue from '@vitejs/plugin-vue'                         // enseña a Vite a leer archivos .vue
+import vueDevTools from 'vite-plugin-vue-devtools'           // panel Vue DevTools (lo trajo create-vue)
 import { visualizer } from 'rollup-plugin-visualizer'        // dibuja el mapa del paquete
 
 const VUE = /node_modules[\\/](vue|@vue|vue-router)[\\/]/    // patrón: carpetas de Vue y de su enrutador
@@ -647,11 +659,17 @@ const VUE = /node_modules[\\/](vue|@vue|vue-router)[\\/]/    // patrón: carpeta
 export default defineConfig(({ mode }) => ({                 // mode vale 'analisis' con npm run build:analisis
   plugins: [
     vue(),                                                   // plugin de Vue
+    vueDevTools(),                                           // solo actúa con npm run dev: no entra en dist
     mode === 'analisis' && visualizer({                      // el mapa solo se genera si se pide
       filename: 'estadisticas.html',                         // archivo del mapa, en la carpeta del proyecto
       gzipSize: true                                         // muestra también el peso comprimido
     })
   ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url))  // '@' en un import significa la carpeta src
+    }
+  },
   build: {
     rollupOptions: {
       output: {
@@ -822,3 +840,4 @@ const emit = defineEmits(['vender'])              // aviso que la fila le manda 
 |---|---|---|---|
 | 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita: se construye desde una carpeta vacía con todo el código en la guía, sin repositorio inicial; 8 pasos de 46 minutos con predicción y resultado visible en cada uno |
 | 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por línea de comandos en Windows 11 y Linux: `npx --yes create-vite@6.4`; Node 20 o 22; vista Reportes recortada (131 líneas para copiar en el paso 1); explicación de `defineProps` desestructurado en Vue 3.5 y de `[\\/]`; `Ctrl + C` al cambiar de servidor; predicción de `v-memo` antes del resultado; tamaños reales del paquete y de Lighthouse; ejercicio básico con `onUpdated` (`onRenderTriggered` no informa el dato cuando el cambio llega por un `computed`); tiempos 5-9-7-2-6-4-6-2-5 |
+| 2.2 | 2026-10-17 | Andrés Eduardo García Márquez | El proyecto se crea con create-vue, la herramienta oficial de Vue que enseñan los manuales: `npx --yes create-vue@3.16.4 catalogo-pro --bare --router` (Vue Router ya conectado; sale el `npm install vue-router` manual y el borrado de archivos de la plantilla); tabla de lo que trae el proyecto; `src/router/index.js` en lugar de `src/router.js`; `vite.config.js` conserva Vue DevTools y el atajo `@`; logotipo `public/favicon.ico` en el paso opcional; tamaños del paquete medidos de nuevo (96 kB antes; 93 kB de Vue y 6 kB propios después); dos filas nuevas en Problemas frecuentes. Validada por línea de comandos en Windows 11 y Linux |

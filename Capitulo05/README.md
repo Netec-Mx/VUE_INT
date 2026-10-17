@@ -55,18 +55,20 @@ Tres piezas pequeñas que aparecen en el código: `__typename` es el campo con e
 
 ## Preparación (6 minutos)
 
-1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto (`--yes` evita la pregunta `Ok to proceed?`; el comando es igual en Windows, macOS y Linux):
+1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto con **create-vue**, la herramienta oficial de Vue (la de `npm create vue@latest` del capítulo 0), en una versión fija para que no haga preguntas. `--bare` deja un `App.vue` mínimo y `--pinia` deja Pinia instalada y conectada; `--yes` evita la pregunta `Ok to proceed?`. El comando es igual en Windows, macOS y Linux:
 
    ```bash
-   npx --yes create-vite@6.4 lab05-projecthub --template vue
+   npx --yes create-vue@3.16.4 lab05-projecthub --bare --pinia
    cd lab05-projecthub
    npm install
    ```
 
-2. Instala las cinco librerías de hoy, con Pinia incluida, en su versión exacta (`--save-exact`):
+   El proyecto trae `index.html`, `vite.config.js` (con el alias `@` que apunta a `src`), `jsconfig.json`, `src/main.js` (ya conecta Pinia), `src/App.vue` (solo dice `You did it!`), `src/stores/counter.js` (una tienda de ejemplo), `public/`, `.vscode/` y `.gitignore`.
+
+2. Instala las cuatro librerías de hoy en su versión exacta (`--save-exact`). Pinia no va en la lista: create-vue ya la instaló:
 
    ```bash
-   npm install --save-exact pinia@3.0.3 axios@1.20.0 @apollo/client@3.13.9 graphql@16.11.0 msw@2.7.3
+   npm install --save-exact axios@1.20.0 @apollo/client@3.13.9 graphql@16.11.0 msw@2.7.3
    ```
 
 3. Copia el trabajador de MSW a la carpeta `public` (la que Vite entrega tal cual al navegador):
@@ -82,7 +84,7 @@ Tres piezas pequeñas que aparecen en el código: `__typename` es el campo con e
    VITE_GRAPHQL_URL=/graphql
    ```
 
-5. Abre la carpeta en Visual Studio Code (`code .`). No borres todavía nada de la plantilla: su `App.vue` aún usa `HelloWorld.vue` y `assets/`.
+5. Borra `src/stores/counter.js`, la tienda de ejemplo: nadie la usa y la tuya la creas en el paso 4. Abre la carpeta en Visual Studio Code (`code .`).
 
 **Qué debes ver:** la terminal termina con `Worker script successfully copied!` y en `public/` aparece `mockServiceWorker.js`.
 
@@ -170,9 +172,9 @@ Tres piezas pequeñas que aparecen en el código: `__typename` es el campo con e
    npx vite --port 5175
    ```
 
-**Primero, predice:** la página todavía es la de la plantilla de Vite. ¿Dónde verías que MSW arrancó, si no cambia nada en pantalla?
+**Primero, predice:** la página todavía dice `You did it!`. ¿Dónde verías que MSW arrancó, si no cambia nada en pantalla?
 
-**Qué debes ver:** abre las herramientas del navegador (**F12**) y la pestaña **Console**: dice `[MSW] Mocking enabled.`
+**Qué debes ver:** abre las herramientas del navegador (**F12**) y la pestaña **Console**: dice `[MSW] Mocking enabled.` El botón flotante del centro, abajo, es Vue DevTools, que create-vue agrega solo en desarrollo; no lo necesitas hoy.
 
 ## Paso 2. Un solo formato de error y el cliente REST (8 minutos)
 
@@ -474,9 +476,7 @@ Tres piezas pequeñas que aparecen en el código: `__typename` es el campo con e
    </style>
    ```
 
-4. Borra de la plantilla lo que ya no usa el nuevo `App.vue`: `src/components/HelloWorld.vue`, la carpeta `src/assets/` y `src/style.css` (en Visual Studio Code: clic derecho y **Delete**).
-
-5. Recarga con **F5**, para empezar con la caché vacía.
+4. Recarga con **F5**, para empezar con la caché vacía.
 
 **Primero, predice:** al abrir no hay token. ¿Qué verás antes de pulsar algún botón?
 
@@ -609,9 +609,8 @@ npx vite --port 5175     # arranca la aplicación en http://localhost:5175
 | Chrome no deja pegar en **Console** | Protección de Chrome contra código pegado | Escribe `allow pasting` (o `permitir pegar`) y pega otra vez |
 | Error de Apollo al usar `fetchPolicy: 'cache-and-network'` | `client.query` responde una sola vez y no admite esa política; es de `useQuery` | Usa `cache-first` o `network-only`, como en esta guía |
 | Vite dice `Port 5175 is in use, trying another one...` | Otra práctica ocupa ese puerto | Usa la dirección que muestra la terminal |
-| `npm create vite@6.4 lab05-projecthub -- --template vue` se queda preguntando el marco | En PowerShell, `npm` se come el `--` y `--template` no llega | Usa `npx --yes create-vite@6.4 lab05-projecthub --template vue`, que no necesita `--` |
+| `npm create vue@latest` pregunta TypeScript, JSX, Router y más, o el proyecto no arranca en tu Node | La versión más nueva de create-vue hace preguntas y trae Vite 7, que pide un Node más reciente que el de la guía | Usa la versión fija de la guía: `npx --yes create-vue@3.16.4 lab05-projecthub --bare --pinia` |
 | `npm run dev -- --port 5175` arranca en el 5173 | En PowerShell se pierde el `--` y Vite no recibe el puerto | Usa `npx vite --port 5175` |
-| `Failed to resolve import "./components/HelloWorld.vue"` | Borraste la plantilla antes de reemplazar `App.vue` | Reemplaza `App.vue` (paso 4) o restaura el archivo |
 
 ## Ejercicios de reserva
 
@@ -677,5 +676,6 @@ En `login()`, llama `loadProjects(true)`: al iniciar sesión siempre se pide de 
 
 | Versión | Fecha | Autor | Cambio |
 |---|---|---|---|
+| 2.2 | 2026-10-17 | Andrés Eduardo García Márquez | El proyecto se crea con create-vue, como enseñan los manuales: `npx --yes create-vue@3.16.4 lab05-projecthub --bare --pinia`. Pinia sale de la lista de `npm install` porque la trae create-vue. Se describe qué trae el proyecto y se borra `src/stores/counter.js`; desaparece el borrado de `HelloWorld.vue`, `assets/` y `style.css`. Aviso del botón de Vue DevTools. `ejercicio-resuelto/` rehecho siguiendo la guía. Validada por CLI en Windows y Linux |
 | 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI desde carpeta vacía en Windows y Linux. `npx --yes create-vite@6.4` y `npx vite --port 5175` (en PowerShell `npm` pierde el `--`). Axios 1.20.0 en lugar de 1.12.2 (`npm audit` marcaba una vulnerabilidad alta). Borrado de la plantilla movido al paso 4. Consola del paso 2 muestra `type`, `status` y `message`. Filtro **Fetch/XHR** para contar peticiones `graphql`. Orden real de `cacheKeys()`. Recarga de Vite anunciada como normal. Rótulos por sistema en el paso 6. Notas de `__typename`, `cache.extract()`, `import.meta.env.DEV`, Urql y del `logout`. Tiempos de los pasos 3, 4 y 6 ajustados (total 46). Tres filas nuevas en Problemas frecuentes |
 | 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía rehecha desde carpeta vacía con `npm create vite@6.4`, sin clonar ni depender del laboratorio anterior. Servidor simulado relativo con `__typename` para que Apollo normalice. `cache-first` y `network-only` en lugar de `cache-and-network`. Un solo `AppError`. Panel de caché visible. Predicción y resultado por paso, ejercicios de reserva y carpeta `solucion/` |

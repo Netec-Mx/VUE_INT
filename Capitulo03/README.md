@@ -44,17 +44,25 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
 
 ## Preparación (6 minutos)
 
-1. Crea una carpeta para tus prácticas (por ejemplo `labs-vue`), abre una terminal dentro de ella y crea el proyecto con Vite 6.4. El comando es igual en Windows, macOS y Linux:
+1. Crea una carpeta para tus prácticas (por ejemplo `labs-vue`), abre una terminal dentro de ella y crea el proyecto con create-vue, la herramienta oficial de Vue (la misma de `npm create vue@latest`, con la versión fijada para que todos obtengan lo mismo). El comando es igual en Windows, macOS y Linux:
 
    ```bash
-   npx --yes create-vite@6.4 projecthub-router --template vue
+   npx --yes create-vue@3.16.4 projecthub-router --bare --router
    cd projecthub-router
    npm install
-   npm install vue-router@4.6
    code .
    ```
 
-   `create-vite` crea la carpeta `projecthub-router` con un proyecto de Vue listo; `npm install` baja las librerías y `vue-router@4.6` agrega el enrutador. `code .` abre la carpeta en VS Code.
+   `--router` agrega Vue Router y deja el enrutador conectado; `--bare` crea el proyecto sin páginas de ejemplo. `npm install` baja las librerías y `code .` abre la carpeta en VS Code.
+
+   El proyecto ya trae lo que necesitas de base:
+
+   | Archivo | Qué trae | Qué haces con él |
+   |---|---|---|
+   | `src/main.js` | Crea la aplicación, le conecta el enrutador con `app.use(router)` y la monta | Nada: queda igual |
+   | `src/router/index.js` | Un enrutador con la tabla de rutas vacía (`routes: []`) | Lo reemplazas en el paso 1 |
+   | `src/App.vue` | Un título "You did it!" | Lo reemplazas en el paso 1 |
+   | `index.html`, `vite.config.js`, `package.json` | La página base, la configuración de Vite y los scripts `dev`, `build` y `preview` | Nada |
 
 2. Arranca el servidor de desarrollo y deja esa terminal abierta:
 
@@ -62,7 +70,7 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
    npm run dev
    ```
 
-**Qué debes ver:** la terminal muestra `Local: http://localhost:5173/`. Ábrelo en Chrome: aparece la página de ejemplo "Vite + Vue". Si la terminal muestra otro puerto, usa ese en todo el laboratorio.
+**Qué debes ver:** la terminal muestra `Local: http://localhost:5173/`. Ábrelo en Chrome: aparece el título "You did it!". En la consola de Chrome (`F12`) verás el aviso `[Vue Router warn]: No match found for location with path "/"`: es normal, la tabla de rutas todavía está vacía. Si la terminal muestra otro puerto, usa ese en todo el laboratorio.
 
 ## Paso 1. El mapa de rutas anidadas (13 minutos)
 
@@ -182,15 +190,15 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
    </template>
    ```
 
-4. Crea `src/router.js`, la tabla de rutas:
+4. Reemplaza todo `src/router/index.js` por la tabla de rutas. Como el archivo vive en `src/router`, las rutas a las vistas empiezan con `../`:
 
    ```js
    import { createRouter, createWebHistory } from 'vue-router'    // funciones para crear el enrutador
-   import ProjectHubLayout from './views/ProjectHubLayout.vue'     // marco con el menú del área de trabajo
-   import NotFoundView from './views/NotFoundView.vue'             // página para direcciones que no existen
-   import DashboardView from './views/DashboardView.vue'           // vista del tablero
-   import ProjectsView from './views/ProjectsView.vue'             // vista de proyectos
-   import TaskDetailView from './views/TaskDetailView.vue'         // vista de detalle de una tarea
+   import ProjectHubLayout from '../views/ProjectHubLayout.vue'    // marco con el menú del área de trabajo
+   import NotFoundView from '../views/NotFoundView.vue'            // página para direcciones que no existen
+   import DashboardView from '../views/DashboardView.vue'          // vista del tablero
+   import ProjectsView from '../views/ProjectsView.vue'            // vista de proyectos
+   import TaskDetailView from '../views/TaskDetailView.vue'        // vista de detalle de una tarea
 
    const routes = [                                                // la tabla: dirección -> componente
      { path: '/', redirect: { name: 'dashboard' } },               // la raíz lleva al tablero, por nombre
@@ -206,25 +214,15 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
      { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView }, // comodín: siempre de último
    ]
 
-   const router = createRouter({ history: createWebHistory(), routes }) // direcciones limpias, sin #
+   const router = createRouter({                                   // el enrutador de la aplicación
+     history: createWebHistory(import.meta.env.BASE_URL),          // direcciones limpias, sin #
+     routes,                                                       // la tabla de arriba
+   })
 
    export default router                                           // main.js lo conecta a la aplicación
    ```
 
-5. Reemplaza todo `src/main.js` y todo `src/App.vue`.
-
-   `src/main.js`:
-
-   ```js
-   import { createApp } from 'vue'          // crea la aplicación de Vue
-   import './style.css'                     // estilos que trae la plantilla de Vite
-   import App from './App.vue'              // componente raíz
-   import router from './router'            // nuestro enrutador (src/router.js)
-
-   createApp(App).use(router).mount('#app') // conecta el enrutador y monta la aplicación
-   ```
-
-   `src/App.vue`:
+5. Reemplaza todo `src/App.vue`. `src/main.js` no se toca: create-vue ya lo dejó con `app.use(router)`.
 
    ```vue
    <template>
@@ -232,8 +230,6 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
      <RouterView />
    </template>
    ```
-
-6. En el explorador de VS Code, borra las carpetas `src/components` y `src/assets`: eran de la página de ejemplo y ya nadie las importa.
 
 **Primero, predice:** al abrir `http://localhost:5173/`, ¿en qué dirección terminas y qué partes ves?
 
@@ -310,19 +306,19 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
    </template>
    ```
 
-3. En `src/router.js` haz seis cambios pequeños; lo demás queda igual.
+3. En `src/router/index.js` haz seis cambios pequeños; lo demás queda igual.
    - Debajo de la primera línea, `import { createRouter, createWebHistory } from 'vue-router'`, agrega:
 
      ```js
-     import { useSesion } from './sesion'                           // la guardia consulta la sesión
-     import LoginView from './views/LoginView.vue'                   // pantalla pública de ingreso
-     import ForbiddenView from './views/ForbiddenView.vue'           // aviso de acceso prohibido
+     import { useSesion } from '../sesion'                          // la guardia consulta la sesión
+     import LoginView from '../views/LoginView.vue'                  // pantalla pública de ingreso
+     import ForbiddenView from '../views/ForbiddenView.vue'          // aviso de acceso prohibido
      ```
 
    - Debajo de `import TaskDetailView ...` agrega:
 
      ```js
-     import AdminView from './views/AdminView.vue'                   // vista de administración
+     import AdminView from '../views/AdminView.vue'                  // vista de administración
      ```
 
    - Debajo de la ruta `{ path: '/', redirect: ... }` agrega las dos rutas públicas:
@@ -382,16 +378,16 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
 
    **Qué debes ver:** uno solo, `index-<código>.js`.
 
-2. En `src/router.js`, reemplaza las cuatro líneas `import DashboardView ...`, `import ProjectsView ...`, `import TaskDetailView ...` e `import AdminView ...` por estas. Las rutas no cambian: siguen usando los mismos nombres.
+2. En `src/router/index.js`, reemplaza las cuatro líneas `import DashboardView ...`, `import ProjectsView ...`, `import TaskDetailView ...` e `import AdminView ...` por estas. Las rutas no cambian: siguen usando los mismos nombres.
 
    ```js
-   const DashboardView = () => import('./views/DashboardView.vue')   // con la flecha, se descarga al visitarla
-   const ProjectsView = () => import('./views/ProjectsView.vue')     // archivo aparte, bajo demanda
-   const TaskDetailView = () => import('./views/TaskDetailView.vue') // archivo aparte, bajo demanda
-   const AdminView = () => import('./views/AdminView.vue')           // solo lo descarga quien entra a /admin
+   const DashboardView = () => import('../views/DashboardView.vue')  // con la flecha, se descarga al visitarla
+   const ProjectsView = () => import('../views/ProjectsView.vue')    // archivo aparte, bajo demanda
+   const TaskDetailView = () => import('../views/TaskDetailView.vue') // archivo aparte, bajo demanda
+   const AdminView = () => import('../views/AdminView.vue')          // solo lo descarga quien entra a /admin
    ```
 
-3. **Precarga.** Quien está en el ingreso casi siempre va al tablero, así que se puede bajar antes. En `src/router.js`, justo antes de `export default router`, agrega:
+3. **Precarga.** Quien está en el ingreso casi siempre va al tablero, así que se puede bajar antes. En `src/router/index.js`, justo antes de `export default router`, agrega:
 
    ```js
    router.afterEach((to) => {                                      // corre al terminar cada navegación
@@ -404,11 +400,11 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
 **Qué debes ver:** cinco archivos `.js`. Así salió en la prueba (los códigos después del guion cambian en cada equipo):
 
 ```text
-dist/assets/DashboardView-Nh2AcMzC.js    0.29 kB │ gzip:  0.24 kB
-dist/assets/ProjectsView-Dt9LUflN.js     0.32 kB │ gzip:  0.25 kB
-dist/assets/TaskDetailView-DjST4BNy.js   0.37 kB │ gzip:  0.29 kB
-dist/assets/AdminView-sJhLBL7a.js        0.47 kB │ gzip:  0.35 kB
-dist/assets/index-B_rN-bwI.js           98.70 kB │ gzip: 38.43 kB
+dist/assets/DashboardView-BtyFsgDf.js    0.29 kB │ gzip:  0.24 kB
+dist/assets/ProjectsView-B5DIYmh6.js     0.32 kB │ gzip:  0.25 kB
+dist/assets/TaskDetailView-ByJuZZIm.js   0.37 kB │ gzip:  0.29 kB
+dist/assets/AdminView-6XalYcyP.js        0.47 kB │ gzip:  0.35 kB
+dist/assets/index-CGyShL0F.js           98.71 kB │ gzip: 38.44 kB
 ```
 
 Arranca de nuevo con `npm run dev`, abre `http://localhost:5173/login`, pulsa `F12`, pestaña **Network** (Red), filtro **JS**, y recarga. `DashboardView.vue` ya aparece en la lista sin haber entrado: es la precarga. Entra y pulsa **Proyectos**: `ProjectsView.vue` aparece en ese momento, no antes.
@@ -442,11 +438,11 @@ Arranca de nuevo con `npm run dev`, abre `http://localhost:5173/login`, pulsa `F
    </template>
    ```
 
-2. En `src/router.js` haz tres cambios:
+2. En `src/router/index.js` haz tres cambios:
    - Debajo de `import NotFoundView ...` agrega:
 
      ```js
-     import ChunkRecoveryView from './views/ChunkRecoveryView.vue'   // aviso cuando falla la descarga de una vista
+     import ChunkRecoveryView from '../views/ChunkRecoveryView.vue'  // aviso cuando falla la descarga de una vista
      ```
 
    - Debajo de la ruta `/forbidden` agrega:
@@ -510,20 +506,20 @@ Marca cada resultado de la diapositiva "Resultados esperados":
 | Ruta inválida: `NotFoundView`. Fragmento perdido: `ChunkRecoveryView` | Pasos 1 y 4 |
 
 <details>
-<summary>Código final de <code>src/router.js</code> (el único archivo que cambió después de crearlo)</summary>
+<summary>Código final de <code>src/router/index.js</code> (el único archivo que cambió después de crearlo)</summary>
 
 ```js
 import { createRouter, createWebHistory } from 'vue-router'    // funciones para crear el enrutador
-import { useSesion } from './sesion'                           // la guardia consulta la sesión
-import LoginView from './views/LoginView.vue'                   // pantalla pública de ingreso
-import ForbiddenView from './views/ForbiddenView.vue'           // aviso de acceso prohibido
-import ProjectHubLayout from './views/ProjectHubLayout.vue'     // marco con el menú del área de trabajo
-import NotFoundView from './views/NotFoundView.vue'             // página para direcciones que no existen
-import ChunkRecoveryView from './views/ChunkRecoveryView.vue'   // aviso cuando falla la descarga de una vista
-const DashboardView = () => import('./views/DashboardView.vue')   // con la flecha, se descarga al visitarla
-const ProjectsView = () => import('./views/ProjectsView.vue')     // archivo aparte, bajo demanda
-const TaskDetailView = () => import('./views/TaskDetailView.vue') // archivo aparte, bajo demanda
-const AdminView = () => import('./views/AdminView.vue')           // solo lo descarga quien entra a /admin
+import { useSesion } from '../sesion'                          // la guardia consulta la sesión
+import LoginView from '../views/LoginView.vue'                  // pantalla pública de ingreso
+import ForbiddenView from '../views/ForbiddenView.vue'          // aviso de acceso prohibido
+import ProjectHubLayout from '../views/ProjectHubLayout.vue'    // marco con el menú del área de trabajo
+import NotFoundView from '../views/NotFoundView.vue'            // página para direcciones que no existen
+import ChunkRecoveryView from '../views/ChunkRecoveryView.vue'  // aviso cuando falla la descarga de una vista
+const DashboardView = () => import('../views/DashboardView.vue')  // con la flecha, se descarga al visitarla
+const ProjectsView = () => import('../views/ProjectsView.vue')    // archivo aparte, bajo demanda
+const TaskDetailView = () => import('../views/TaskDetailView.vue') // archivo aparte, bajo demanda
+const AdminView = () => import('../views/AdminView.vue')          // solo lo descarga quien entra a /admin
 
 const routes = [                                                // la tabla: dirección -> componente
   { path: '/', redirect: { name: 'dashboard' } },               // la raíz lleva al tablero, por nombre
@@ -544,7 +540,10 @@ const routes = [                                                // la tabla: dir
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView }, // comodín: siempre de último
 ]
 
-const router = createRouter({ history: createWebHistory(), routes }) // direcciones limpias, sin #
+const router = createRouter({                                   // el enrutador de la aplicación
+  history: createWebHistory(import.meta.env.BASE_URL),          // direcciones limpias, sin #
+  routes,                                                       // la tabla de arriba
+})
 
 router.beforeEach((to) => {                                     // la guardia: corre antes de CADA navegación
   const { conectado, usuario } = useSesion()                    // estado de la sesión en este momento
@@ -590,13 +589,14 @@ npx vite --port 5173     # arranca la aplicación en http://localhost:5173
 | Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
 | `npx : ... running scripts is disabled on this system` en PowerShell | Windows bloquea los scripts de npm | Ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` y repite, o usa la terminal `cmd` |
-| `Failed to resolve import "vue-router"` | Falta instalar el enrutador | `npm install vue-router@4.6` dentro de `projecthub-router` |
+| `Failed to resolve import "vue-router"` | Creaste el proyecto sin `--router` | Vuelve a crearlo con el comando de la preparación, que incluye `--router` |
 | La dirección es `/app/dashboard` pero no se ve "Tablero" | Falta el `<RouterView />` dentro de `ProjectHubLayout.vue` | Revisa el paso 1.2: el padre necesita su propio `RouterView` |
 | `Uncaught Error: No match for {"name":"admin"...}` | Un enlace usa un nombre de ruta que no existe en la tabla | Revisa que el `name` del enlace y el de la ruta se escriban igual |
 | Te pide ingresar otra vez tras escribir en la barra o guardar `sesion.js` | La sesión vive en memoria y la página se recargó | Es normal en este laboratorio; en el capítulo 4 se guarda con un plugin de persistencia de Pinia (4.3) |
-| La primera vez que abres la aplicación tras el paso 1, la página se recarga sola y la terminal dice `new dependencies optimized: vue-router` | Vite prepara el enrutador la primera vez que alguien lo importa | Es normal y pasa una sola vez; espera a que cargue y sigue |
+| La primera vez que abres la aplicación, la página se recarga sola y la terminal dice `new dependencies optimized: ...` | Vite prepara las librerías la primera vez que alguien las importa | Es normal y pasa una sola vez; espera a que cargue y sigue |
 | Al pulsar **Entrar** tarda unos segundos la primera vez | En desarrollo, Vite compila cada vista la primera vez que se pide | Espera; las siguientes veces es inmediato |
 | `Port 4173 is in use, trying another one...` al usar `npm run preview` | Otra versión compilada quedó servida | Usa la dirección que muestra la terminal o cierra la otra con `Ctrl + C` |
+| Abajo, en el centro de la página, aparece una pastilla con el logo de Vue | Es Vue DevTools, que create-vue agrega con `vite-plugin-vue-devtools` en `vite.config.js` | Es normal: solo existe con `npm run dev` y te sirve para ver rutas y componentes; no viaja en `npm run build` |
 | `Port 5173 is in use, trying another one...` | Otro servidor quedó abierto | Usa la dirección que muestra la terminal o cierra el otro con `Ctrl + C` |
 | Tras el paso 3, `npm run build` sigue con un solo `.js` | Quedó alguna `import ... from` de una vista protegida | Revisa que las cuatro líneas usen `() => import(...)` |
 

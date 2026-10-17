@@ -1,7 +1,7 @@
 <script setup>
 import { storeToRefs } from 'pinia'              // saca datos de una tienda sin perder la conexión
 import { useRouter } from 'vue-router'           // para navegar desde código
-import { useAuthStore } from './stores/auth.js'  // la tienda de sesión
+import { useAuthStore } from '@/stores/auth.js'  // la tienda de sesión
 
 const auth = useAuthStore()                      // la misma tienda que consulta la guardia
 const { user } = storeToRefs(auth)               // lo que se lee, con storeToRefs

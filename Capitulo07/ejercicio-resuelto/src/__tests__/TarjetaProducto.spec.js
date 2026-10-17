@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'           // piezas de Vitest
 import { mount } from '@vue/test-utils'                 // monta el componente en el documento de jsdom
-import TarjetaProducto from './TarjetaProducto.vue'     // el componente que se prueba
+import TarjetaProducto from '../components/TarjetaProducto.vue' // el componente que se prueba
 
 const base = { id: 7, nombre: 'Teclado', precio: 89900 } // producto de prueba
 const montar = (extra) =>                               // atajo: monta la tarjeta con la base...

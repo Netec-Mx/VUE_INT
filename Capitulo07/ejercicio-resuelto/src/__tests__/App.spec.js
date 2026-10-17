@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'           // vi crea dobles
 import { mount, flushPromises } from '@vue/test-utils'     // flushPromises espera las promesas pendientes
-import App from './App.vue'                                 // el catálogo completo
+import App from '../App.vue'                                // el catálogo completo
 
 const productos = [                                         // lo que "responde" el servicio de mentira
   { id: 1, nombre: 'Mouse inalámbrico', precio: 49900 },

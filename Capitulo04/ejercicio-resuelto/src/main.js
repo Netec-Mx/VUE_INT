@@ -1,7 +1,7 @@
 import { createApp } from 'vue'                      // crea la aplicación
 import { createPinia } from 'pinia'                  // crea Pinia, el gestor de tiendas
 import App from './App.vue'                          // componente principal
-import router from './router.js'                     // enrutador (repaso del capítulo 3)
+import router from './router'                        // enrutador: Vite abre src/router/index.js
 import { persistPlugin } from './plugins/persist.js' // paso 4: guarda lo que cada tienda declara
 import { auditPlugin } from './plugins/audit.js'     // paso 5: anota cada acción en la consola
 

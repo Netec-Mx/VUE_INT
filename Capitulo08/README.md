@@ -22,7 +22,7 @@ Al terminar tendrás cuatro resultados a la vista: `✓ built` del monorepo, eve
 
 ## Conceptos que usas
 
-Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8.1); variables `VITE_`, Dockerfile de dos etapas, `.dockerignore`, Nginx con `try_files`, GitHub Actions, `--frozen-lockfile`, etiquetas `v1.0.0` y ghcr.io (8.2); `app.config.errorHandler` y rollback (8.3); `beforeEach` y `afterEach` de Vue Router (capítulo 3); `describe`, `it` y `expect` de Vitest (capítulo 7).
+Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8.1); variables `VITE_`, Dockerfile de dos etapas, `.dockerignore`, Nginx con `try_files`, GitHub Actions, `--frozen-lockfile`, etiquetas `v1.0.0` y ghcr.io (8.2); `app.config.errorHandler` y rollback (8.3); create-vue con `--router` y el atajo `@` hacia `src` (capítulos 0 y 1); `beforeEach` y `afterEach` de Vue Router (capítulo 3); `describe`, `it` y `expect` de Vitest (capítulo 7).
 
 **Repaso del capítulo 7:** la prueba de Vitest que escribes en el paso 1 es la misma que después corre la pipeline en cada cambio.
 
@@ -229,16 +229,20 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
 
 **Qué vas a hacer y por qué:** la app vive en `apps/web` y usa `ui` solo por su puerta de entrada, sin rutas internas.
 
-1. Crea la app con el creador oficial de Vite 6.4 y borra los ejemplos que no usarás. `create-vite` solo copia los archivos de la plantilla; no instala nada, así que no mezcla npm con pnpm: la instalación la hace pnpm en el punto 6. El borrado usa Node.js para que el mismo comando sirva en Windows, macOS y Linux:
+1. Crea la app con create-vue, la herramienta oficial de Vue (la misma de `npm create vue@latest` del capítulo 0), en una versión fija que funciona con Node 20 y 22. Se lanza **dentro** de `apps/` porque create-vue usa el nombre de la carpeta como nombre del paquete y uno con `/` le haría preguntar. Los comandos son iguales en Windows (PowerShell), macOS y Linux:
 
    ```bash
-   npx --yes create-vite@6.4 apps/web --template vue
-   node -e "for (const p of ['apps/web/src/components', 'apps/web/src/assets', 'apps/web/src/style.css']) require('fs').rmSync(p, { recursive: true })"
+   mkdir apps
+   cd apps
+   npx --yes create-vue@3.16.4 web --bare --router
+   cd ..
    ```
 
-   De la plantilla se quedan sin cambios `index.html`, `vite.config.js`, `public/vite.svg`, `.gitignore`, `README.md` y `.vscode/extensions.json`, todos dentro de `apps/web`.
+   `--router` agrega Vue Router y `src/router/index.js`; `--bare` deja el proyecto mínimo, sin componentes de ejemplo. Escribe las opciones sin `--` delante del nombre: PowerShell se lo come. create-vue solo copia archivos y no instala nada, así que no mezcla npm con pnpm: la instalación la hace pnpm en el punto 6. **No ejecutes** el `npm install` que sugiere al final.
 
-2. Reemplaza `apps/web/package.json` completo. El nombre `@catalogo/web` es el que usa `--filter`; las versiones van fijas para que todos instalen lo mismo:
+   Mira lo que trajo `apps/web`: `index.html`, `vite.config.js` (Vite 6 con el atajo `@` hacia `src` y las Vue DevTools), `jsconfig.json`, `public/favicon.ico`, `.vscode/`, `.gitignore` y `README.md` se quedan sin cambios. `src/main.js` también se queda por ahora: ya crea la app, le suma el enrutador y la dibuja en `#app` (lo amplías en el paso 3). Reemplazas `package.json`, `src/router/index.js` y `src/App.vue`, y no borras nada.
+
+2. Reemplaza `apps/web/package.json` completo. El nombre `@catalogo/web` es el que usa `--filter`; las versiones van fijas para que todos instalen lo mismo, y `vite-plugin-vue-devtools` se queda porque lo usa el `vite.config.js` que trajo create-vue:
 
    ```json
    {
@@ -256,26 +260,29 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
        "vue-router": "4.5.0"
      },
      "devDependencies": {
-       "@vitejs/plugin-vue": "5.2.1",
-       "vite": "~6.4.0"
+       "@vitejs/plugin-vue": "5.2.3",
+       "vite": "~6.4.0",
+       "vite-plugin-vue-devtools": "7.7.2"
      }
    }
    ```
 
-3. Crea `apps/web/src/router.js`:
+3. Reemplaza `apps/web/src/router/index.js` completo (create-vue lo trae con la lista de rutas vacía):
 
    ```js
    import { createRouter, createWebHistory } from 'vue-router'
-   import InicioVista from './vistas/InicioVista.vue'
-   import CatalogoVista from './vistas/CatalogoVista.vue'
+   import InicioVista from '@/vistas/InicioVista.vue' // @ es el atajo a src/ que trae vite.config.js
+   import CatalogoVista from '@/vistas/CatalogoVista.vue'
 
-   export const router = createRouter({
-     history: createWebHistory(), // URL limpias como /catalogo: Nginx tendrá que entenderlas
+   const router = createRouter({
+     history: createWebHistory(import.meta.env.BASE_URL), // URL limpias como /catalogo: Nginx tendrá que entenderlas
      routes: [
        { path: '/', component: InicioVista },
        { path: '/catalogo', component: CatalogoVista }
      ]
    })
+
+   export default router // main.js lo importa con import router from './router'
    ```
 
 4. Las dos vistas. Inicio trae un botón que falla a propósito, para el paso 3; Catálogo trae datos de ejemplo (cópialos tal cual).
@@ -319,9 +326,7 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
    </template>
    ```
 
-5. Reemplaza el contenido completo de dos archivos de la plantilla.
-
-   `apps/web/src/App.vue`:
+5. Reemplaza `apps/web/src/App.vue` completo (create-vue lo trae con un solo `<h1>You did it!</h1>`):
 
    ```vue
    <template>
@@ -335,16 +340,6 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
        <RouterView />
      </main>
    </template>
-   ```
-
-   `apps/web/src/main.js`:
-
-   ```js
-   import { createApp } from 'vue'
-   import App from './App.vue'
-   import { router } from './router.js'
-
-   createApp(App).use(router).mount('#app') // crea la app, suma el enrutador y la dibuja en #app
    ```
 
 6. **Primero, predice:** la app importa un `.vue` que vive fuera de ella, en `packages/ui`. ¿Compilará? Instala y compila desde la raíz:
@@ -386,17 +381,20 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
    }
    ```
 
-2. Reemplaza `apps/web/src/main.js` para instalarlo **antes** de montar, así no se pierde la primera navegación:
+2. Reemplaza `apps/web/src/main.js` completo (el que trajo create-vue más dos líneas) para instalarlo **antes** de montar, así no se pierde la primera navegación:
 
    ```js
    import { createApp } from 'vue'
    import App from './App.vue'
-   import { router } from './router.js'
-   import { instalarObservabilidad } from './observabilidad.js'
+   import router from './router'
+   import { instalarObservabilidad } from './observabilidad.js' // nuevo
 
    const app = createApp(App)
-   instalarObservabilidad(app, router) // engancha el enrutador y el manejador de errores
-   app.use(router).mount('#app')
+   instalarObservabilidad(app, router) // nuevo: engancha el enrutador y el manejador de errores
+
+   app.use(router)
+
+   app.mount('#app')
    ```
 
 3. **Primero, predice:** ¿qué `version` dirá el evento en desarrollo? Arranca y abre `http://127.0.0.1:5178` en Chrome con la consola abierta (F12):
@@ -610,6 +608,8 @@ pnpm dev                     # arranca la aplicación en http://127.0.0.1:5178
 | `pnpm.ps1 cannot be loaded because running scripts is disabled on this system` | PowerShell bloquea scripts. Ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` o escribe `pnpm.cmd`. |
 | `Port 5178 is already in use` | Otro servidor ocupa el puerto. Ciérralo con Ctrl+C en su terminal. |
 | `Bind for 0.0.0.0:8088 failed: port is already allocated` o `/health` responde algo que no es `ok` | Otro programa usa el puerto 8088 en tu equipo. Borra el contenedor con `docker rm -f catalogo-platform` y arráncalo con otro puerto, por ejemplo `-p 8089:80`, y usa ese puerto en `curl` y en Chrome. |
+| create-vue pregunta `Package name:` o falla con `ERR_TTY_INIT_FAILED` | Lo lanzaste con `apps/web` como nombre: con `/` no es un nombre de paquete válido. Borra la carpeta si se creó, entra a `apps` y ejecuta `npx --yes create-vue@3.16.4 web --bare --router`. |
+| Avisos `EBADENGINE` o `Vite requires Node.js version ...` | Usaste `create-vue@latest`: las versiones nuevas traen Vite 7 y piden un Node.js más reciente que el del aula. Crea la app otra vez con `create-vue@3.16.4`. |
 | `Failed to resolve import "@catalogo/ui"` | Agregaste la dependencia y no corriste `pnpm install`. |
 | `Missing "./src/estado.js" specifier in "@catalogo/ui" package` | Importaste una ruta interna. Importa desde `@catalogo/ui`. |
 | `Error: Cannot find matching keyid` al ejecutar `pnpm` | Corriste `corepack enable` con un Node.js 22 anterior a 22.14: su Corepack trae llaves de firma viejas y no puede bajar pnpm. Ejecuta `corepack disable pnpm` y luego `npm install -g pnpm@9.15.4`. |
@@ -681,7 +681,7 @@ Al final de los `steps` del trabajo `calidad`:
 
 </details>
 
-Cada archivo aparece completo una sola vez, salvo `apps/web/src/main.js`, cuya versión final es la del paso 3. `index.html`, `vite.config.js`, `public/vite.svg`, `.gitignore`, `README.md` y `.vscode/extensions.json` de `apps/web` salen de la plantilla de Vite sin cambios.
+Cada archivo que escribes aparece completo una sola vez. `apps/web/src/main.js` sale de create-vue y su versión final es la del paso 3. `index.html`, `vite.config.js`, `jsconfig.json`, `public/favicon.ico`, `.gitignore`, `README.md` y `.vscode/` de `apps/web` salen de create-vue sin cambios.
 
 ## Recursos
 
@@ -689,3 +689,10 @@ Cada archivo aparece completo una sola vez, salvo `apps/web/src/main.js`, cuya v
 - Variables y modos de Vite: https://vite.dev/guide/env-and-mode
 - Sintaxis de GitHub Actions: https://docs.github.com/es/actions
 - Manejador global de errores de Vue: https://vuejs.org/api/application.html#app-config-errorhandler
+
+## Control de cambios
+
+| Versión | Fecha | Autor | Cambio |
+|---|---|---|---|
+| 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita desde carpeta vacía con todo el código; validada por CLI en Windows 11 y Linux; puerto 8088 para el contenedor; `npm install -g pnpm@9.15.4` en lugar de `corepack enable` en el equipo |
+| 2.1 | 2026-10-17 | Andrés Eduardo García Márquez | `apps/web` se crea con create-vue, la herramienta oficial que enseñan los manuales: `npx --yes create-vue@3.16.4 web --bare --router` dentro de `apps/` (con `apps/web` como nombre pregunta el nombre del paquete); el enrutador pasa a `src/router/index.js` con el atajo `@`; `main.js` de create-vue se conserva en el paso 2; nada se borra; `ejercicio-resuelto/` rehecho siguiendo la guía; validada paso a paso en Windows 11, incluido `docker build`, y con la pasada final en Linux |

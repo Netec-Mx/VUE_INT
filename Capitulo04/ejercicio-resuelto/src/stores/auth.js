@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'          // crea tiendas
 import { computed, ref } from 'vue'          // piezas del capítulo 1
-import { api } from '../api.js'              // API simulada
+import { api } from '@/api.js'               // API simulada (@ = src)
 
 // Tienda de composición: una función que arma la tienda con ref, computed y funciones
 export const useAuthStore = defineStore('auth', () => {

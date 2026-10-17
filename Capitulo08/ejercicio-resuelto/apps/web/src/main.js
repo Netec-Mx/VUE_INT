@@ -1,8 +1,11 @@
 import { createApp } from 'vue'
 import App from './App.vue'
-import { router } from './router.js'
-import { instalarObservabilidad } from './observabilidad.js'
+import router from './router'
+import { instalarObservabilidad } from './observabilidad.js' // nuevo
 
 const app = createApp(App)
-instalarObservabilidad(app, router) // engancha el enrutador y el manejador de errores
-app.use(router).mount('#app')
+instalarObservabilidad(app, router) // nuevo: engancha el enrutador y el manejador de errores
+
+app.use(router)
+
+app.mount('#app')

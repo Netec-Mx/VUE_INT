@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'                         // estado local del formulario
 import { useRoute, useRouter } from 'vue-router'  // la ruta actual y el enrutador
-import { useAuthStore } from '../stores/auth.js'  // la tienda de sesión
+import { useAuthStore } from '@/stores/auth.js'   // la tienda de sesión
 
 const auth = useAuthStore()                       // estado global: la sesión
 const route = useRoute()                          // para leer ?redirect=...

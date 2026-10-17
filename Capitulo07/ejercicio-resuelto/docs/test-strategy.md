@@ -25,7 +25,7 @@
 
 ## Criterios de calidad
 
-- npm run test:run y npm run e2e en verde antes de entregar un cambio.
+- npm run test:run y npm run test:e2e en verde antes de entregar un cambio.
 - Cobertura mínima: 80 % de líneas, funciones y sentencias; 75 % de ramas.
 - Ninguna E2E espera un número fijo de milisegundos.
 - Todo error corregido llega con una prueba que lo habría detectado.

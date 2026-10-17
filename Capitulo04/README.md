@@ -36,8 +36,7 @@ Todos se vieron en las diapositivas; entre paréntesis, el capítulo.
 
 - **Node.js 20 o superior** (el programa que ejecuta JavaScript fuera del navegador); la guía se probó con 22.3.0 en Windows y 24.18.0 en Linux. Compruébalo con `node -v`.
 - Google Chrome y Visual Studio Code con la extensión **Vue (Official)**.
-- Opcional: la extensión **Vue Devtools** de Chrome; tiene una pestaña **Pinia** para ver cada tienda por dentro.
-- No necesitas descargar nada del repositorio: todo el código está en esta guía.
+- No necesitas descargar nada del repositorio: todo el código está en esta guía. Las herramientas de Vue para ver cada tienda por dentro ya vienen en el proyecto que crea `create-vue`; no hace falta instalar extensiones en Chrome.
 
 ## Preparación (6 minutos)
 
@@ -48,19 +47,32 @@ Todos se vieron en las diapositivas; entre paréntesis, el capítulo.
    cd labs-vue-cap04
    ```
 
-2. Crea el proyecto con Vite 6 (versión fijada para que corra con el Node.js de la guía de instalación) e instala Pinia y Vue Router:
+2. Crea el proyecto con `create-vue`, la herramienta oficial de Vue (la misma de `npm create vue@latest`), ya con Vue Router y Pinia, e instala las dependencias. La versión queda fijada en 3.16.4 porque trae Vite 6, que corre con el Node.js de la guía de instalación; las opciones evitan las preguntas del asistente:
 
    ```bash
-   npx --yes create-vite@6.4.1 projecthub --template vue
+   npx --yes create-vue@3.16.4 projecthub --bare --router --pinia
    cd projecthub
    npm install
-   npm install pinia@3.0.4 vue-router@4.6.4
    ```
 
-3. Abre la carpeta en el editor con `code .`. En el explorador de VS Code **borra** `src/components`, `src/assets` y `src/style.css`: son del ejemplo de Vite y no se usan.
-4. En `index.html` cambia `lang="en"` por `lang="es"` (el lector de pantalla leerá en español) y `<title>Vite + Vue</title>` por `<title>ProjectHub</title>`.
+   `--bare` deja un `App.vue` mínimo, sin componentes de ejemplo; `--router` agrega Vue Router y `--pinia` agrega Pinia.
 
-**Qué debes ver:** `added ... packages` sin errores, y en `src/` solo quedan `App.vue` y `main.js`. Aún no arranques el servidor: `App.vue` todavía busca los archivos que borraste.
+3. Abre la carpeta en el editor con `code .` y mira lo que creó `create-vue`:
+
+   | Archivo | Qué es | Qué haces con él |
+   |---|---|---|
+   | `src/main.js` | Crea la aplicación e instala Pinia y el enrutador | Lo reemplazas en el paso 2 |
+   | `src/App.vue` | Componente raíz con un título de prueba | Lo reemplazas en el paso 2 |
+   | `src/router/index.js` | Enrutador sin rutas | Lo reemplazas en el paso 2 |
+   | `src/stores/counter.js` | Tienda de ejemplo (un contador) | **Bórralo ahora**: no se usa |
+   | `vite.config.js` | Configuración de Vite: el atajo `@` apunta a `src/` y activa Vue DevTools | No lo tocas |
+   | `index.html` | Página que carga la aplicación | Le cambias el idioma y el título (punto 4) |
+
+4. En `index.html` cambia `lang=""` por `lang="es"` (el lector de pantalla leerá en español) y `<title>Vite App</title>` por `<title>ProjectHub</title>`.
+
+**Qué debes ver:** `added ... packages` sin errores; en `package.json`, `pinia` y `vue-router` dentro de `dependencies`, y en `src/` quedan `App.vue`, `main.js`, `router/index.js` y la carpeta `stores` vacía.
+
+En esta guía, `@/` es el atajo a `src/`: `@/stores/auth.js` es `src/stores/auth.js` desde cualquier carpeta. Entre archivos de la misma carpeta se usa `./`.
 
 ## Paso 1. Diseñar las cinco tiendas en papel (1 minuto)
 
@@ -123,13 +135,13 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    }
    ```
 
-2. Reemplaza todo `src/main.js`:
+2. Reemplaza todo `src/main.js`. El de `create-vue` ya instala Pinia y el enrutador; este guarda Pinia en una variable, porque en los pasos 4 y 5 le registrarás plugins:
 
    ```js
    import { createApp } from 'vue'                      // crea la aplicación
    import { createPinia } from 'pinia'                  // crea Pinia, el gestor de tiendas
    import App from './App.vue'                          // componente principal
-   import router from './router.js'                     // enrutador (repaso del capítulo 3)
+   import router from './router'                        // enrutador: Vite abre src/router/index.js
 
    const pinia = createPinia()                          // la instancia de Pinia, en una variable para hablarle
 
@@ -144,7 +156,7 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    ```js
    import { defineStore } from 'pinia'          // crea tiendas
    import { computed, ref } from 'vue'          // piezas del capítulo 1
-   import { api } from '../api.js'              // API simulada
+   import { api } from '@/api.js'               // API simulada (@ = src)
 
    // Tienda de composición: una función que arma la tienda con ref, computed y funciones
    export const useAuthStore = defineStore('auth', () => {
@@ -170,20 +182,20 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    })
    ```
 
-4. Crea `src/router.js`:
+4. Reemplaza todo `src/router/index.js` (repaso del capítulo 3: rutas, carga perezosa y guardia):
 
    ```js
    import { createRouter, createWebHistory } from 'vue-router' // repaso del capítulo 3
-   import { useAuthStore } from './stores/auth.js'             // la tienda de sesión
+   import { useAuthStore } from '@/stores/auth.js'             // la tienda de sesión
 
    const router = createRouter({
-     history: createWebHistory(),                              // direcciones limpias, sin #
+     history: createWebHistory(import.meta.env.BASE_URL),      // direcciones limpias, sin #
      routes: [
        { path: '/', redirect: '/proyectos' },                  // la raíz lleva a proyectos
-       { path: '/login', name: 'login', component: () => import('./views/LoginView.vue') }, // carga perezosa
+       { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') }, // carga perezosa
        {
          path: '/proyectos',
-         component: () => import('./views/ProjectsView.vue'),  // se descarga solo al visitarla
+         component: () => import('@/views/ProjectsView.vue'),  // se descarga solo al visitarla
          meta: { requiresAuth: true },                         // exige sesión
        },
      ],
@@ -206,7 +218,7 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    <script setup>
    import { ref } from 'vue'                         // estado local del formulario
    import { useRoute, useRouter } from 'vue-router'  // la ruta actual y el enrutador
-   import { useAuthStore } from '../stores/auth.js'  // la tienda de sesión
+   import { useAuthStore } from '@/stores/auth.js'   // la tienda de sesión
 
    const auth = useAuthStore()                       // estado global: la sesión
    const route = useRoute()                          // para leer ?redirect=...
@@ -250,7 +262,7 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    <script setup>
    import { storeToRefs } from 'pinia'              // saca datos de una tienda sin perder la conexión
    import { useRouter } from 'vue-router'           // para navegar desde código
-   import { useAuthStore } from './stores/auth.js'  // la tienda de sesión
+   import { useAuthStore } from '@/stores/auth.js'  // la tienda de sesión
 
    const auth = useAuthStore()                      // la misma tienda que consulta la guardia
    const { user } = storeToRefs(auth)               // lo que se lee, con storeToRefs
@@ -362,7 +374,7 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    ```js
    import { defineStore } from 'pinia'                  // crea tiendas
    import { computed, ref } from 'vue'                  // piezas del capítulo 1
-   import { api } from '../api.js'                      // API simulada
+   import { api } from '@/api.js'                       // API simulada (@ = src)
    import { useApiStatusStore } from './apiStatus.js'   // carga y errores en un solo lugar
 
    export const useProjectsStore = defineStore('projects', () => {
@@ -392,7 +404,7 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    ```js
    import { defineStore } from 'pinia'                  // crea tiendas
    import { computed, ref } from 'vue'                  // piezas del capítulo 1
-   import { api } from '../api.js'                      // API simulada
+   import { api } from '@/api.js'                       // API simulada (@ = src)
    import { useApiStatusStore } from './apiStatus.js'   // carga y errores en un solo lugar
    import { useUiStore } from './ui.js'                 // el filtro vive en la tienda de interfaz
 
@@ -428,10 +440,10 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
    <script setup>
    import { onMounted } from 'vue'                            // ciclo de vida (capítulo 1)
    import { storeToRefs } from 'pinia'                        // lo que se lee, con storeToRefs
-   import { useApiStatusStore } from '../stores/apiStatus.js' // carga y errores
-   import { useProjectsStore } from '../stores/projects.js'   // proyectos
-   import { useTasksStore } from '../stores/tasks.js'         // tareas
-   import { useUiStore } from '../stores/ui.js'               // tema, filtro y avisos
+   import { useApiStatusStore } from '@/stores/apiStatus.js'  // carga y errores
+   import { useProjectsStore } from '@/stores/projects.js'    // proyectos
+   import { useTasksStore } from '@/stores/tasks.js'          // tareas
+   import { useUiStore } from '@/stores/ui.js'                // tema, filtro y avisos
 
    const projects = useProjectsStore()                        // cada tienda, una vez
    const tasks = useTasksStore()
@@ -491,7 +503,7 @@ Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `to
 
 **Primero, predice:** si marcas **Publicar el sitio**, ¿cambia el número del título? Sí: el título y la lista leen la **misma** copia de la tarea en `byId`. Ahora pulsa **Simular error** y predice si desaparecen los proyectos. No desaparecen: el semáforo pasa a `error`, el contador a `Errores registrados: 1` y aparece el aviso `No se pudo cargar proyectos: el servidor respondió 500`. Prueba también **Cambiar tema** y el filtro **Mostrar**.
 
-Si tienes Vue Devtools, abre la pestaña **Pinia**: verás las cinco tiendas con sus datos.
+Abre Vue DevTools con `Alt + Shift + D` en la página (o el botón flotante de abajo) y entra a **Pinia**: verás las cinco tiendas con sus datos. Viene con el proyecto: `create-vue` lo dejó en `vite.config.js`, y la terminal de Vite lo anuncia al arrancar.
 
 ## Paso 4. Persistencia selectiva con un plugin (6 minutos)
 
@@ -528,7 +540,7 @@ Si tienes Vue Devtools, abre la pestaña **Pinia**: verás las cinco tiendas con
    }
    ```
 
-2. En `src/main.js`, agrega esta línea debajo de `import router from './router.js'`:
+2. En `src/main.js`, agrega esta línea debajo de `import router from './router'`:
 
    ```js
    import { persistPlugin } from './plugins/persist.js' // paso 4: guarda lo que cada tienda declara
@@ -587,13 +599,13 @@ Responde `'{"user":{"name":"Ana","roles":["editor"]}}'`: no hay token. `localSto
 
 **Primero, predice:** al recargar `/proyectos`, ¿qué actions aparecerán en la consola?
 
-**Qué debes ver** en la consola de Chrome, con tiempos parecidos, cuatro líneas: `apiStatus.track 305.7 ms` y `tasks.loadAll 311.8 ms` (las tareas), y `apiStatus.track 414.3 ms` y `projects.loadAll 419.2 ms` (los proyectos). Cada carga deja dos: la de `track` y la de la action que lo llamó. Pulsa **Simular error** y salen tres más: `ui.notify 0.3 ms` (el aviso que dio `apiStatus`), en rojo `apiStatus.track el servidor respondió 500`, que es la que provocaste a propósito, y `projects.loadAll 411.9 ms` como mensaje normal, porque esa action atrapó el error y puso el semáforo en `error`.
+**Qué debes ver** en la consola de Chrome, con tiempos parecidos, cuatro líneas: `apiStatus.track 305.7 ms` y `tasks.loadAll 311.8 ms` (las tareas), y `apiStatus.track 414.3 ms` y `projects.loadAll 419.2 ms` (los proyectos). Cada carga deja dos: la de `track` y la de la action que lo llamó. Antes salen líneas como `🍍 "projects" store installed 🆕`: las escribe Vue DevTools cuando conecta cada tienda, no tu plugin. Pulsa **Simular error** y salen tres más: `ui.notify 0.3 ms` (el aviso que dio `apiStatus`), en rojo `apiStatus.track el servidor respondió 500`, que es la que provocaste a propósito, y `projects.loadAll 411.9 ms` como mensaje normal, porque esa action atrapó el error y puso el semáforo en `error`.
 
 ## Paso 6. Comprobar los cinco resultados (3 minutos)
 
 | Comprobación | Resultado esperado |
 |---|---|
-| Pestaña **Pinia** de Vue Devtools, o los archivos de `src/stores` | Cinco tiendas: `auth`, `ui`, `apiStatus`, `projects` y `tasks` |
+| **Pinia** en Vue DevTools (`Alt + Shift + D`), o los archivos de `src/stores` | Cinco tiendas: `auth`, `ui`, `apiStatus`, `projects` y `tasks` |
 | Marcar una tarea | El título de pendientes cambia: una sola copia en `byId` |
 | `F5` y la consola con `localStorage` | Tema, filtro y sesión siguen; no hay `token`, `toast` ni errores guardados |
 | **Simular error** | `Errores registrados` sube y aparece el aviso |
@@ -624,7 +636,7 @@ Responde `'{"user":{"name":"Ana","roles":["editor"]}}'`: no hay token. `localSto
 import { createApp } from 'vue'                      // crea la aplicación
 import { createPinia } from 'pinia'                  // crea Pinia, el gestor de tiendas
 import App from './App.vue'                          // componente principal
-import router from './router.js'                     // enrutador (repaso del capítulo 3)
+import router from './router'                        // enrutador: Vite abre src/router/index.js
 import { persistPlugin } from './plugins/persist.js' // paso 4: guarda lo que cada tienda declara
 import { auditPlugin } from './plugins/audit.js'     // paso 5: anota cada acción en la consola
 
@@ -656,11 +668,11 @@ npx vite --port 5174     # arranca la aplicación en http://localhost:5174
 
 | Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
-| `getActivePinia() was called but there was no active Pinia` | El enrutador se instaló antes que Pinia, o `useAuthStore()` quedó fuera de `beforeEach` | En `main.js`, `.use(pinia)` antes de `.use(router)`; en `router.js`, la tienda se pide dentro de la guardia |
-| `Failed to resolve import "./components/HelloWorld.vue"` | Arrancaste el servidor antes de reemplazar `App.vue` | Reemplaza `App.vue` (paso 2.7) y guarda |
+| `getActivePinia() was called but there was no active Pinia` | El enrutador se instaló antes que Pinia, o `useAuthStore()` quedó fuera de `beforeEach` | En `main.js`, `.use(pinia)` antes de `.use(router)`; en `router/index.js`, la tienda se pide dentro de la guardia |
+| `[Vue Router warn]: No match found for location with path "/proyectos"` | Arrancaste el servidor con el `src/router/index.js` de `create-vue`, que no tiene rutas | Reemplázalo (paso 2.4), guarda y recarga con `F5` |
 | Tras recargar, el tema o la sesión se pierden | Falta `pinia.use(persistPlugin)` o la clave no está en `paths` | Revisa el paso 4 y el `persist` de la tienda |
 | Guardas una tienda y no ves el cambio | La recarga en caliente de Vite conserva la tienda que ya nació | Recarga con `F5` |
-| `npm create vite@6.4.1 projecthub -- --template vue` se queda preguntando el framework en PowerShell | PowerShell se come el `--` y la opción `--template` no llega a Vite | Usa el comando de la guía, `npx --yes create-vite@6.4.1 projecthub --template vue`, que no necesita `--` y sirve igual en los tres sistemas |
+| `npm create vue@latest` hace preguntas (`Project name`, `Add TypeScript?`) o, al arrancar, Vite pide un Node.js más nuevo | Sin versión fijada llega un `create-vue` que trae Vite 7 (exige Node.js 20.19 o 22.12 en adelante), y sin opciones el asistente pregunta | Usa el comando de la guía, `npx --yes create-vue@3.16.4 projecthub --bare --router --pinia`: no pregunta, trae Vite 6 y sirve igual en los tres sistemas, sin el `--` que PowerShell se come |
 | La terminal dice `Local: http://localhost:5173/` en lugar de 5174 | Usaste `npm run dev -- --port 5174` en PowerShell: el `--` se pierde y Vite recibe `5174` como carpeta, no como puerto | Detén con `Ctrl + C` y arranca con `npx vite --port 5174` |
 | `Port 5174 is in use` | Otro servidor quedó abierto | Ciérralo con `Ctrl + C` en su terminal |
 
@@ -763,3 +775,4 @@ if (saved) {
 |---|---|---|---|
 | 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita para construir desde una carpeta vacía con Vite 6.4: todo el código en la guía, predicción y resultado visible por paso, repaso de la guardia del capítulo 3, persistencia y auditoría con plugins propios, y ejercicios de reserva con solución |
 | 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI (interfaz de línea de comandos) en Windows y Linux: el proyecto se crea con `npx --yes create-vite@6.4.1` y el servidor con `npx vite --port 5174`, porque PowerShell se come el `--`; predicción completa de la consola en el paso 5; tiempos 1 y 14 minutos en los pasos 1 y 3; Node.js mínimo probado; explicación del getter que devuelve una función, de `options` en el plugin y de `detached`; ejercicio medio con el archivo completo; dos problemas frecuentes nuevos |
+| 2.2 | 2026-10-17 | Andrés Eduardo García Márquez | El proyecto se crea con `create-vue` 3.16.4, la herramienta oficial de Vue que enseñan los manuales (`--bare --router --pinia`), en lugar de `create-vite` más la instalación manual de Pinia y Vue Router; tabla de lo que trae el proyecto y qué se reemplaza o se borra; el enrutador pasa a `src/router/index.js` y los imports usan el atajo `@/`; Vue DevTools viene integrado (`Alt + Shift + D`); predicción de la consola con los mensajes de las tiendas; problemas frecuentes de `create-vue`; `ejercicio-resuelto/` regenerado siguiendo la guía y validado por CLI en Windows y Linux |

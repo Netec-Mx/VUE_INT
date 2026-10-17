@@ -1,14 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'    // funciones para crear el enrutador
-import { useSesion } from './sesion'                           // la guardia consulta la sesión
-import LoginView from './views/LoginView.vue'                   // pantalla pública de ingreso
-import ForbiddenView from './views/ForbiddenView.vue'           // aviso de acceso prohibido
-import ProjectHubLayout from './views/ProjectHubLayout.vue'     // marco con el menú del área de trabajo
-import NotFoundView from './views/NotFoundView.vue'             // página para direcciones que no existen
-import ChunkRecoveryView from './views/ChunkRecoveryView.vue'   // aviso cuando falla la descarga de una vista
-const DashboardView = () => import('./views/DashboardView.vue')   // con la flecha, se descarga al visitarla
-const ProjectsView = () => import('./views/ProjectsView.vue')     // archivo aparte, bajo demanda
-const TaskDetailView = () => import('./views/TaskDetailView.vue') // archivo aparte, bajo demanda
-const AdminView = () => import('./views/AdminView.vue')           // solo lo descarga quien entra a /admin
+import { useSesion } from '../sesion'                          // la guardia consulta la sesión
+import LoginView from '../views/LoginView.vue'                  // pantalla pública de ingreso
+import ForbiddenView from '../views/ForbiddenView.vue'          // aviso de acceso prohibido
+import ProjectHubLayout from '../views/ProjectHubLayout.vue'    // marco con el menú del área de trabajo
+import NotFoundView from '../views/NotFoundView.vue'            // página para direcciones que no existen
+import ChunkRecoveryView from '../views/ChunkRecoveryView.vue'  // aviso cuando falla la descarga de una vista
+const DashboardView = () => import('../views/DashboardView.vue')  // con la flecha, se descarga al visitarla
+const ProjectsView = () => import('../views/ProjectsView.vue')    // archivo aparte, bajo demanda
+const TaskDetailView = () => import('../views/TaskDetailView.vue') // archivo aparte, bajo demanda
+const AdminView = () => import('../views/AdminView.vue')          // solo lo descarga quien entra a /admin
 
 const routes = [                                                // la tabla: dirección -> componente
   { path: '/', redirect: { name: 'dashboard' } },               // la raíz lleva al tablero, por nombre
@@ -29,7 +29,10 @@ const routes = [                                                // la tabla: dir
   { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView }, // comodín: siempre de último
 ]
 
-const router = createRouter({ history: createWebHistory(), routes }) // direcciones limpias, sin #
+const router = createRouter({                                   // el enrutador de la aplicación
+  history: createWebHistory(import.meta.env.BASE_URL),          // direcciones limpias, sin #
+  routes,                                                       // la tabla de arriba
+})
 
 router.beforeEach((to) => {                                     // la guardia: corre antes de CADA navegación
   const { conectado, usuario } = useSesion()                    // estado de la sesión en este momento

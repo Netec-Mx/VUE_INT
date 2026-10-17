@@ -37,24 +37,26 @@ Todos se vieron en las diapositivas del capítulo 2, salvo el que se indica:
 
 ## Preparación (4 minutos)
 
-1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto con Vite 6.4 (la herramienta que arma y sirve el proyecto). El comando es igual en Windows (PowerShell), macOS y Linux:
+1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto con create-vue, la herramienta oficial de Vue (la misma de `npm create vue@latest` del capítulo 0), en una versión fija que funciona con Node 20 y 22. El comando es igual en Windows (PowerShell), macOS y Linux:
 
    ```bash
-   npx --yes create-vite@6.4 lab02-composables --template vue
+   npx --yes create-vue@3.16.4 lab02-composables --default --bare
    cd lab02-composables
    npm install
    ```
 
-   `--yes` acepta descargar el creador de proyectos de Vite sin preguntar y `--template vue` elige la plantilla de Vue, así que no te hace preguntas. `npm install` deja instalado Vite 6.4 aunque `package.json` diga `^6.3.1`: el `^` admite cualquier 6.x más reciente.
+   `--yes` acepta descargar el creador sin preguntar. `--default` responde "No" a todas las opciones (TypeScript, Router, Pinia, pruebas), porque este laboratorio no las necesita, y `--bare` deja un proyecto mínimo, sin componentes de ejemplo. Escribe las opciones sin `--` delante del nombre: PowerShell se lo come.
 
-2. Abre la carpeta `lab02-composables` en VS Code. Reemplaza todo el contenido de `src/main.js` por este. Ya no importa `style.css`; los estilos los pones tú en el paso 1:
+2. Abre la carpeta `lab02-composables` en VS Code y mira qué trae: `index.html` (la página con `<div id="app">`), `vite.config.js` (Vite 6 con el atajo `@` hacia `src` y las Vue DevTools, el panel de depuración en el navegador), `jsconfig.json`, `public/favicon.ico`, `.vscode/`, `.gitignore`, `README.md`, y en `src` solo dos archivos. No borras ninguno. `src/main.js` ya viene listo y no lo cambias:
 
    ```js
-   import { createApp } from 'vue'   // función que crea la aplicación
-   import App from './App.vue'       // componente raíz, el primero que se dibuja
+   import { createApp } from 'vue'
+   import App from './App.vue'
 
-   createApp(App).mount('#app')      // crea la aplicación y la dibuja en <div id="app"> de index.html
+   createApp(App).mount('#app')
    ```
+
+   Crea la aplicación con el componente raíz `App.vue` y la dibuja en `<div id="app">` de `index.html`. `src/App.vue` solo dice "You did it!"; lo reemplazas en el paso 1.
 
 3. Arranca el servidor de desarrollo en el puerto 5172 y deja esa terminal abierta. `npx vite` ejecuta el Vite instalado en el proyecto; el comando es igual en PowerShell, macOS y Linux:
 
@@ -62,7 +64,7 @@ Todos se vieron en las diapositivas del capítulo 2, salvo el que se indica:
    npx vite --port 5172
    ```
 
-**Qué debes ver:** en la terminal, `Local: http://localhost:5172/`. Ábrelo en Chrome: aparece la página de ejemplo de Vite, sin estilos (los quitaste al cambiar `main.js`).
+**Qué debes ver:** en la terminal, `Local: http://localhost:5172/`. Ábrelo en Chrome: aparece el título "You did it!" y, abajo, el botón flotante de las Vue DevTools.
 
 ## Paso 1. El punto de partida en Options API (5 minutos)
 
@@ -156,8 +158,6 @@ Todos se vieron en las diapositivas del capítulo 2, salvo el que se indica:
    .compacta li { padding: 0; }
    </style>
    ```
-
-   Desde ahora `src/components/HelloWorld.vue` y `src/style.css` ya no se usan; puedes borrarlos.
 
 **Primero, predice:** marca **Vista compacta** y recarga la página con `F5`. ¿Sigue marcada?
 
@@ -468,7 +468,8 @@ npx vite --port 5172     # arranca la aplicación en http://localhost:5172
 
 | Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
-| El creador pregunta `Select a framework` | Se usó `npm create vite ... -- --template vue`: PowerShell se come el `--` y la plantilla no llega | Pulsa `Ctrl + C`, borra la carpeta si se creó y usa `npx --yes create-vite@6.4 lab02-composables --template vue` |
+| El creador pregunta `Add TypeScript?` o falla con `ERR_TTY_INIT_FAILED` | Faltó `--default`: con solo `--bare`, create-vue hace sus preguntas | Pulsa `Ctrl + C`, borra la carpeta si se creó y usa `npx --yes create-vue@3.16.4 lab02-composables --default --bare` |
+| Avisos `EBADENGINE` o `Vite requires Node.js version ...` | Se usó `create-vue@latest`: las versiones nuevas traen Vite 7 y piden un Node más reciente que el del aula | Crea el proyecto otra vez con la versión fija `create-vue@3.16.4` |
 | La terminal muestra `Local: http://localhost:5173/` y no 5172 | Se usó `npm run dev -- --port 5172` en PowerShell, que se come el `--` | Detén el servidor con `Ctrl + C` y usa `npx vite --port 5172` |
 | `Port 5172 is in use, trying another one...` | Otro servidor quedó abierto en ese puerto | Usa la dirección que muestra la terminal, o cierra el otro servidor con `Ctrl + C` |
 | `Failed to resolve import "./composables/..."` | El archivo no está en `src/composables` o el nombre no coincide | Revisa la carpeta y el nombre exacto, con mayúsculas |
@@ -541,6 +542,7 @@ En `App.vue`: `import { conPermiso } from './conPermiso.js'`, `const ProjectHubS
 
 ## Recursos
 
+- [Crear un proyecto de Vue con create-vue](https://vuejs.org/guide/quick-start#creating-a-vue-application)
 - [Por qué existe la Composition API](https://vuejs.org/guide/extras/composition-api-faq)
 - [Composables: cómo escribirlos y nombrarlos](https://vuejs.org/guide/reusability/composables)
 - [provide e inject](https://vuejs.org/guide/components/provide-inject)
@@ -553,3 +555,4 @@ En `App.vue`: `import { conPermiso } from './conPermiso.js'`, `const ProjectHubS
 |---|---|---|---|
 | 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita: el proyecto se crea desde una carpeta vacía con Vite 6.4 y todo el código está en la guía; parte de una versión en Options API; predicción y resultado visible en cada paso; ejercicios de reserva con solución; `npm run build` como prueba final |
 | 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI en Windows 11 (PowerShell) y Linux: el proyecto se crea con `npx --yes create-vite@6.4` y el servidor arranca con `npx vite --port 5172`, porque PowerShell se come el `--` de `npm create ... -- --template` y de `npm run dev -- --port`; Node 20 o 22; aviso de borrar `HelloWorld.vue` al final del paso 1; paso opcional de la rama de error; paso 4 con el archivo completo; aclaración del slot; paso 5.1 opcional con los avisos reales de la consola; problemas frecuentes con las dos fallas reales |
+| 2.2 | 2026-10-17 | Andrés Eduardo García Márquez | El proyecto se crea con create-vue, la herramienta oficial que enseñan los manuales: `npx --yes create-vue@3.16.4 lab02-composables --default --bare` (sin `--default` hace preguntas); la guía dice qué trae el proyecto, que `src/main.js` no cambia y que no se borra nada; `ejercicio-resuelto/` rehecho siguiendo la guía; validada paso a paso en Windows 11 y con la pasada final en Linux |

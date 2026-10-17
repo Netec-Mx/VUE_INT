@@ -9,7 +9,7 @@
 
 ## De qué trata
 
-Vas a probar **Catálogo Pro**, un catálogo pequeño con buscador y favoritos, en los tres niveles de la pirámide: unitarias con Vitest, de componentes con Vue Test Utils y de extremo a extremo (E2E, *end to end*) con Cypress. Antes de escribir una sola prueba vas a dejar por escrito qué se prueba, en qué nivel y qué **no** se prueba. Construyes todo desde una carpeta vacía: no se clona ni se descarga material del curso; solo se instalan paquetes npm.
+Vas a probar **Catálogo Pro**, un catálogo pequeño con buscador y favoritos, en los tres niveles de la pirámide: unitarias con Vitest, de componentes con Vue Test Utils y de extremo a extremo (E2E, *end to end*) con Cypress. Antes de escribir una sola prueba vas a dejar por escrito qué se prueba, en qué nivel y qué **no** se prueba. Construyes todo desde una carpeta vacía con **create-vue**, la herramienta oficial de Vue, que ya deja Vitest y Cypress instalados y configurados: no se clona ni se descarga material del curso; solo se instalan paquetes npm.
 
 **Objetivo:** documentar una estrategia de pruebas basada en riesgos, niveles de prueba y criterios de exclusión, y comprobarla con pruebas automáticas.
 
@@ -18,7 +18,7 @@ Vas a probar **Catálogo Pro**, un catálogo pequeño con buscador y favoritos, 
 ```text
 npm run test:run       ->  Test Files  3 passed (3)   Tests 10 passed (10)
 npm run test:coverage  ->  tabla de cobertura sin "ERROR: Coverage ... does not meet"
-npm run e2e            ->  All specs passed!   3 pruebas aprobadas en Chrome
+npm run test:e2e       ->  All specs passed!   3 pruebas aprobadas en Chrome
 ```
 
 ## Objetivos
@@ -26,7 +26,7 @@ npm run e2e            ->  All specs passed!   3 pruebas aprobadas en Chrome
 Al terminar podrás:
 
 - Escribir `docs/test-strategy.md` con pirámide, riesgos priorizados y pruebas excluidas.
-- Configurar Vitest con jsdom y cobertura V8 en un proyecto de Vite.
+- Completar la configuración de Vitest que trae create-vue con una preparación común y cobertura V8.
 - Probar una función pura con tres casos: normal, borde y error.
 - Probar un componente por lo que muestra y lo que avisa, con un doble del servicio de datos.
 - Automatizar tres recorridos en Chrome con Cypress, datos fijos y sin esperas por tiempo.
@@ -53,45 +53,58 @@ Al terminar podrás:
 
 ## Preparación (5 minutos)
 
-1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto con la plantilla oficial de Vite, versión fijada. `npx --yes create-vite` no necesita el `--` que PowerShell se come, así que el comando es igual en Windows, macOS y Linux:
+1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto con create-vue, versión fijada. Las opciones responden de antemano las preguntas del asistente: `--vitest` agrega las pruebas unitarias y de componentes, `--cypress` las E2E y `--bare` deja una aplicación mínima, sin páginas de ejemplo. Van sin el `--` que PowerShell se come, así que el comando es igual en Windows, macOS y Linux:
 
    ```bash
-   npx --yes create-vite@6.4.1 lab07-pruebas --template vue
+   npx --yes create-vue@3.16.4 lab07-pruebas --bare --vitest --cypress
    cd lab07-pruebas
    npm install
    ```
 
-2. Instala las herramientas de prueba con versiones exactas (`-D`: solo para desarrollo; `-E`: versión exacta). Cypress descarga su programa y tarda entre uno y tres minutos: **mientras termina, haz el punto 3 y luego el paso 1**, que no usan la terminal.
+   `npm install` termina con `prepare` → `cypress install`: create-vue dejó ese script para que Cypress descargue su programa la primera vez: unos 600 MB, de uno a tres minutos con buena red y bastante más en un equipo lento. **Mientras termina, haz el paso 1**, que no usa la terminal. Si Cypress ya estaba, responde `Cypress 14.5.4 is installed`.
+
+2. Agrega la medición de cobertura. Debe tener la misma versión que Vitest, así que fijas las dos (`-D`: solo para desarrollo; `-E`: versión exacta):
 
    ```bash
-   npm install -D -E vitest@3.2.4 @vitest/coverage-v8@3.2.4 jsdom@26.1.0 @vue/test-utils@2.4.6 cypress@14.5.4 start-server-and-test@2.0.12
-   npx cypress install
+   npm install -D -E vitest@3.2.7 @vitest/coverage-v8@3.2.7
    ```
 
-   `npx cypress install` asegura el programa de Cypress: algunas versiones de npm ya no ejecutan solas la descarga al instalar el paquete. Si ya estaba, responde `Cypress 14.5.4 is installed`.
+3. Abre la carpeta en VS Code (`code .`) y mira lo que trajo create-vue:
 
-3. Abre la carpeta en VS Code (`code .`). En `package.json`, reemplaza el bloque `"scripts"` completo por este:
+   | Archivo o carpeta | Qué es | Qué haces con él |
+   |---|---|---|
+   | `vite.config.js` | Vite con el plugin de Vue, las Vue DevTools y el alias `@` para `src` | Nada |
+   | `vitest.config.js` | Vitest con jsdom, que reutiliza `vite.config.js` | Lo reemplazas en el paso 2 |
+   | `src/__tests__/App.spec.js` | Prueba de ejemplo: busca "You did it!" en `App.vue` | Lo reemplazas en el paso 5 |
+   | `src/main.js` y `src/App.vue` | Arranque y componente raíz mínimos | Los reemplazas en el paso 5 |
+   | `cypress.config.js` | Cypress apuntando a `vite preview` en el puerto 4173 | Lo reemplazas en el paso 7 |
+   | `cypress/e2e/example.cy.js` | E2E de ejemplo: también busca "You did it!" | Lo borras en el paso 7 |
+   | `cypress/support/`, `cypress/fixtures/example.json`, `jsconfig.json`, `public/`, `.vscode/`, `README.md` | Preparación de Cypress, datos de ejemplo, ayuda para VS Code y documentación | Nada |
+
+4. En `package.json`, reemplaza el bloque `"scripts"` completo por este. Conservas los nombres de create-vue (`test:unit`, `test:e2e`, `prepare`) y cambias el puerto y el navegador:
 
    ```json
    "scripts": {
      "dev": "vite",
      "build": "vite build",
      "preview": "vite preview --host 127.0.0.1 --port 4177 --strictPort",
-     "test": "vitest",
+     "test:unit": "vitest",
      "test:run": "vitest run",
      "test:coverage": "vitest run --coverage",
-     "cy:run": "cypress run --browser chrome",
-     "e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4177 cy:run"
+     "prepare": "cypress install",
+     "cy:run": "cypress run --e2e --browser chrome",
+     "test:e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4177 cy:run"
    },
    ```
 
    | Script | Para qué |
    |---|---|
-   | `test` | Vitest en modo vigilancia: repite las pruebas cada vez que guardas |
+   | `test:unit` | Vitest en modo vigilancia: repite las pruebas cada vez que guardas |
    | `test:run` / `test:coverage` | Una sola pasada; la segunda mide la cobertura |
    | `preview` | Sirve la aplicación compilada en el puerto 4177, propio de este laboratorio para no chocar con otro `preview` abierto |
-   | `e2e` | Compila, arranca `preview`, corre Cypress en Chrome y apaga el servidor |
-   | `start-server-and-test` | Lo usa `e2e`: arranca `preview`, espera a que responda la URL y luego corre Cypress; al terminar, apaga el servidor |
+   | `prepare` | npm lo corre solo al final de cada `npm install`: descarga Cypress si falta |
+   | `cy:run` | Cypress sin ventana, en Chrome; va en su propio script para no anidar comillas, que cada sistema trata distinto |
+   | `test:e2e` | Compila y usa `start-server-and-test`: arranca `preview`, espera a que responda la URL, corre `cy:run` y apaga el servidor |
 
 **Qué debes ver:** la instalación termina con `added ... packages` y sin `ERR!`.
 
@@ -129,7 +142,7 @@ Al terminar podrás:
 
    ## Criterios de calidad
 
-   - npm run test:run y npm run e2e en verde antes de entregar un cambio.
+   - npm run test:run y npm run test:e2e en verde antes de entregar un cambio.
    - Cobertura mínima: 80 % de líneas, funciones y sentencias; 75 % de ramas.
    - Ninguna E2E espera un número fijo de milisegundos.
    - Todo error corregido llega con una prueba que lo habría detectado.
@@ -143,28 +156,34 @@ Al terminar podrás:
 
 **Qué vas a hacer y por qué:** la lógica del filtro va en una función pura, sin Vue ni red. Es la base de la pirámide: la prueba más rápida y la que más se escribe.
 
-1. Reemplaza todo `vite.config.js` por este:
+1. Reemplaza todo `vitest.config.js`. Las líneas de create-vue quedan igual; las marcadas `NUEVO` agregan la preparación común y la cobertura:
 
    ```js
-   import { defineConfig } from 'vitest/config'   // igual al de Vite, pero entiende la clave test
-   import vue from '@vitejs/plugin-vue'           // traduce los archivos .vue
+   import { fileURLToPath } from 'node:url'
+   import { mergeConfig, defineConfig, configDefaults } from 'vitest/config'
+   import viteConfig from './vite.config'
 
-   export default defineConfig({
-     plugins: [vue()],                            // también compila los .vue dentro de las pruebas
-     test: {                                      // todo lo de Vitest va aquí
-       environment: 'jsdom',                      // navegador de mentira: crea window y document
-       include: ['src/**/*.test.js'],             // qué archivos son pruebas
-       setupFiles: ['./vitest.setup.js'],         // preparación que corre antes de cada archivo de pruebas
-       coverage: {                                // cobertura: qué líneas ejecutaron las pruebas
-         provider: 'v8',                          // la mide el motor V8 de Node.js
-         reporter: ['text', 'html'],              // tabla en la terminal y página en coverage/index.html
-         include: ['src/**/*.{js,vue}'],          // el código de la aplicación
-         exclude: ['src/main.js', 'src/api.js', 'src/**/*.test.js'], // arranque y red: los cubre la E2E
-         thresholds: { lines: 80, functions: 80, statements: 80, branches: 75 } // mínimos de la estrategia
-       }
-     }
-   })
+   export default mergeConfig(
+     viteConfig,                                       // reutiliza plugins y alias de vite.config.js
+     defineConfig({
+       test: {                                         // todo lo de Vitest va aquí
+         environment: 'jsdom',                         // navegador de mentira: crea window y document
+         exclude: [...configDefaults.exclude, 'e2e/**'],
+         root: fileURLToPath(new URL('./', import.meta.url)),
+         setupFiles: ['./vitest.setup.js'],            // NUEVO: preparación que corre antes de cada archivo de pruebas
+         coverage: {                                   // NUEVO: qué líneas ejecutaron las pruebas
+           provider: 'v8',                             // la mide el motor V8 de Node.js
+           reporter: ['text', 'html'],                 // tabla en la terminal y página en coverage/index.html
+           include: ['src/**/*.{js,vue}'],             // el código de la aplicación
+           exclude: ['src/main.js', 'src/api.js', 'src/__tests__/**'], // arranque, red y pruebas: no se miden
+           thresholds: { lines: 80, functions: 80, statements: 80, branches: 75 } // mínimos de la estrategia
+         }
+       },
+     }),
+   )
    ```
+
+   Vitest toma como prueba todo archivo `*.spec.js` o `*.test.js`; `configDefaults.exclude` ya deja fuera `node_modules` y la carpeta `cypress`, que corre aparte.
 
 2. Crea en la raíz del proyecto `vitest.setup.js`:
 
@@ -189,11 +208,11 @@ Al terminar podrás:
    }
    ```
 
-4. Crea la prueba junto a la función, en `src/utils/filtrarProductos.test.js`:
+4. Crea la prueba en `src/__tests__/filtrarProductos.spec.js`, la carpeta de pruebas que trae create-vue:
 
    ```js
    import { describe, it, expect } from 'vitest'               // agrupar, declarar un caso y comprobar
-   import { filtrarProductos } from './filtrarProductos.js'   // la función que se prueba
+   import { filtrarProductos } from '../utils/filtrarProductos.js' // la función que se prueba
 
    const productos = [                                         // datos fijos: siempre los mismos
      { id: 1, nombre: 'Mouse inalámbrico' },
@@ -223,12 +242,13 @@ Al terminar podrás:
    npm run test:run
    ```
 
-**Qué debes ver:**
+**Qué debes ver:** tus tres pruebas y la de ejemplo de create-vue, que sigue pasando porque `App.vue` aún dice "You did it!":
 
 ```text
- ✓ src/utils/filtrarProductos.test.js (3 tests)
- Test Files  1 passed (1)
-      Tests  3 passed (3)
+ ✓ src/__tests__/App.spec.js (1 test)
+ ✓ src/__tests__/filtrarProductos.spec.js (3 tests)
+ Test Files  2 passed (2)
+      Tests  4 passed (4)
 ```
 
 ## Paso 3. Romperla a propósito y leer el error (3 minutos)
@@ -238,16 +258,16 @@ Al terminar podrás:
 1. Arranca Vitest en modo vigilancia y déjalo abierto:
 
    ```bash
-   npm test
+   npm run test:unit
    ```
 
 2. En `src/utils/filtrarProductos.js`, en la última línea, cambia `p.nombre.toLowerCase().includes(buscado)` por `p.nombre.includes(buscado)` y guarda.
 
 3. **Predice:** ¿qué caso falla y qué lista recibirá?
 
-**Qué debes ver:** Vitest repite solo las pruebas y marca en rojo el caso normal: `expected [] to deeply equal [ 1, 3 ]`, con el bloque `- Expected` y `+ Received`, la ubicación `❯ src/utils/filtrarProductos.test.js:13:40` y un `^` debajo de la línea de `expect` que falló. Abajo queda `FAIL  Tests failed. Watching for file changes...`: sigue vigilando. "Mouse" empieza con mayúscula y ya no coincide con "mo".
+**Qué debes ver:** Vitest repite solo las pruebas y marca en rojo el caso normal: `expected [] to deeply equal [ 1, 3 ]`, con el bloque `- Expected` y `+ Received`, la ubicación `❯ src/__tests__/filtrarProductos.spec.js:13:40` y un `^` debajo de la línea de `expect` que falló. Abajo queda `FAIL  Tests failed. Watching for file changes...`: sigue vigilando. "Mouse" empieza con mayúscula y ya no coincide con "mo".
 
-4. Deshaz el cambio (`Ctrl + Z`) y guarda: vuelve a `3 passed`. Pulsa `q` para salir del modo vigilancia.
+4. Deshaz el cambio (`Ctrl + Z`) y guarda: vuelve a `4 passed`. Pulsa `q` para salir del modo vigilancia.
 
 ## Paso 4. Probar un componente por lo que muestra y avisa (7 minutos)
 
@@ -279,12 +299,12 @@ Al terminar podrás:
    </template>
    ```
 
-2. Crea `src/components/TarjetaProducto.test.js`:
+2. Crea `src/__tests__/TarjetaProducto.spec.js`:
 
    ```js
    import { describe, it, expect } from 'vitest'           // piezas de Vitest
    import { mount } from '@vue/test-utils'                 // monta el componente en el documento de jsdom
-   import TarjetaProducto from './TarjetaProducto.vue'     // el componente que se prueba
+   import TarjetaProducto from '../components/TarjetaProducto.vue' // el componente que se prueba
 
    const base = { id: 7, nombre: 'Teclado', precio: 89900 } // producto de prueba
    const montar = (extra) =>                               // atajo: monta la tarjeta con la base...
@@ -317,7 +337,7 @@ Al terminar podrás:
    npm run test:run
    ```
 
-**Qué debes ver:** `Test Files  2 passed (2)` y `Tests  6 passed (6)`. Ninguna prueba busca clases CSS: si mañana cambian los estilos, siguen en verde.
+**Qué debes ver:** `Test Files  3 passed (3)` y `Tests  7 passed (7)`. Ninguna prueba busca clases CSS: si mañana cambian los estilos, siguen en verde.
 
 ## Paso 5. El catálogo completo y su prueba con un doble (10 minutos)
 
@@ -352,7 +372,6 @@ Al terminar podrás:
 
    ```js
    import { createApp } from 'vue'          // crea la aplicación
-   import './style.css'                    // estilos de la plantilla de Vite
    import App from './App.vue'             // componente raíz
    import { api } from './api.js'          // servicio real de datos
 
@@ -414,13 +433,7 @@ Al terminar podrás:
    </template>
    ```
 
-5. Borra el componente de bienvenida de la plantilla, que ya nadie usa. Si no lo borras, la cobertura del paso 6 lo cuenta como código sin probar. En el explorador de VS Code: clic derecho sobre `src/components/HelloWorld.vue` y **Eliminar**. Si prefieres la terminal, este comando sirve igual en Windows, macOS y Linux:
-
-   ```bash
-   node -e "require('fs').rmSync('src/components/HelloWorld.vue')"
-   ```
-
-6. Mira el catálogo funcionando. Arranca el servidor de desarrollo en el puerto 5177 (`npx vite` es el mismo Vite de `npm run dev` y recibe el puerto sin el `--` que PowerShell se come):
+5. Mira el catálogo funcionando. Arranca el servidor de desarrollo en el puerto 5177 (`npx vite` es el mismo Vite de `npm run dev` y recibe el puerto sin el `--` que PowerShell se come):
 
    ```bash
    npx vite --port 5177
@@ -428,12 +441,12 @@ Al terminar podrás:
 
    Abre `http://localhost:5177`, escribe "mo" en el buscador (quedan Mouse inalámbrico y Monitor 4K) y marca una estrella (el resumen pasa a `Favoritos: 1 de 5`). Luego detén el servidor con `Ctrl + C`.
 
-7. Crea la prueba del catálogo en `src/App.test.js`:
+6. Reemplaza todo `src/__tests__/App.spec.js`, la prueba de ejemplo de create-vue, por la del catálogo. La de ejemplo buscaba "You did it!", que ya no existe:
 
    ```js
    import { describe, it, expect, vi } from 'vitest'           // vi crea dobles
    import { mount, flushPromises } from '@vue/test-utils'     // flushPromises espera las promesas pendientes
-   import App from './App.vue'                                 // el catálogo completo
+   import App from '../App.vue'                                // el catálogo completo
 
    const productos = [                                         // lo que "responde" el servicio de mentira
      { id: 1, nombre: 'Mouse inalámbrico', precio: 49900 },
@@ -478,7 +491,7 @@ Al terminar podrás:
    })
    ```
 
-8. **Predice:** si quitaras la línea `await flushPromises()` de la primera prueba, ¿qué fallaría? (Respuesta: la cuenta de filas, porque la lista aún está vacía mientras la respuesta no llega.) Ejecuta:
+7. **Predice:** si quitaras la línea `await flushPromises()` de la primera prueba, ¿qué fallaría? (Respuesta: la cuenta de filas, porque la lista aún está vacía mientras la respuesta no llega.) Ejecuta:
 
    ```bash
    npm run test:run
@@ -496,28 +509,33 @@ npm run test:coverage
 
 **Qué debes ver:** una tabla con `App.vue`, `TarjetaProducto.vue` y `filtrarProductos.js`, con `All files` en 100 % de líneas, ramas y funciones, y ningún mensaje `ERROR: Coverage for ... does not meet global threshold`. El detalle línea por línea queda en `coverage/index.html`: ábrelo en Chrome y busca las líneas en rojo.
 
-`main.js` y `api.js` no aparecen: se excluyeron en `vite.config.js` porque solo arrancan la aplicación y llaman a la red, y eso lo prueba la E2E del paso 7. Es el mismo criterio de exclusión de tu estrategia.
+`main.js` y `api.js` no aparecen: se excluyeron en `vitest.config.js` porque solo arrancan la aplicación y llaman a la red, y eso lo prueba la E2E del paso 7. Es el mismo criterio de exclusión de tu estrategia.
 
 ## Paso 7. Tres recorridos E2E con Cypress (8 minutos)
 
 **Qué vas a hacer y por qué:** arriba de la pirámide van pocas pruebas, en un navegador real, para los recorridos que no pueden fallar. Cypress responde por el servidor con datos fijos (`cy.intercept`), así la prueba da el mismo resultado hoy y mañana.
 
-1. Crea `cypress.config.js` en la raíz del proyecto:
+1. Reemplaza todo `cypress.config.js`. create-vue apuntaba al puerto 4173 de `vite preview`; ahora apunta al 4177 del script `preview`:
 
    ```js
-   import { defineConfig } from 'cypress'          // armador de la configuración
+   import { defineConfig } from 'cypress'
 
    export default defineConfig({
      e2e: {
-       baseUrl: 'http://127.0.0.1:4177',            // la aplicación compilada que sirve vite preview
-       specPattern: 'cypress/e2e/**/*.cy.js',       // qué archivos son pruebas E2E
-       supportFile: false,                          // no usamos archivo de preparación común
-       video: false                                 // no graba video: termina antes
-     }
+       specPattern: 'cypress/e2e/**/*.{cy,spec}.{js,jsx,ts,tsx}', // qué archivos son pruebas E2E
+       baseUrl: 'http://127.0.0.1:4177',               // CAMBIA: la aplicación compilada en el puerto del laboratorio
+       video: false                                    // NUEVO: no graba video, termina antes
+     },
    })
    ```
 
-2. Crea los datos fijos en `cypress/fixtures/productos.json`. Son tres productos, no los cinco de `public/api`:
+2. Borra la E2E de ejemplo, que busca "You did it!" y ya fallaría. En el explorador de VS Code: clic derecho sobre `cypress/e2e/example.cy.js` y **Eliminar**. Si prefieres la terminal, este comando sirve igual en Windows, macOS y Linux:
+
+   ```bash
+   node -e "require('fs').rmSync('cypress/e2e/example.cy.js')"
+   ```
+
+3. Crea los datos fijos en `cypress/fixtures/productos.json`. Son tres productos, no los cinco de `public/api`:
 
    ```json
    [
@@ -527,7 +545,7 @@ npm run test:coverage
    ]
    ```
 
-3. Crea `cypress/e2e/catalogo.cy.js`:
+4. Crea `cypress/e2e/catalogo.cy.js`:
 
    ```js
    // Abre el catálogo y responde por el servidor con lo que diga cada prueba
@@ -560,10 +578,10 @@ npm run test:coverage
    })
    ```
 
-4. **Predice:** en la primera prueba, ¿cuántas tarjetas verá Cypress, 5 o 3? Ejecuta:
+5. **Predice:** en la primera prueba, ¿cuántas tarjetas verá Cypress, 5 o 3? Ejecuta:
 
    ```bash
-   npm run e2e
+   npm run test:e2e
    ```
 
 **Qué debes ver:** la compilación, el aviso de `preview` en `http://127.0.0.1:4177` y, al final:
@@ -590,44 +608,46 @@ Son 3 tarjetas: Cypress atrapó la petición y respondió con la fixture. Busca 
 - `docs/test-strategy.md` con pirámide, riesgos y exclusiones.
 - `npm run test:run`: 10 pruebas unitarias y de componentes en verde.
 - `npm run test:coverage`: reporte V8 con 80 % de líneas o más.
-- `npm run e2e`: tres recorridos de Cypress aprobados en Chrome.
+- `npm run test:e2e`: tres recorridos de Cypress aprobados en Chrome.
 
 <details>
-<summary>Código final de <code>package.json</code> (el único archivo que cambió después de crearlo)</summary>
+<summary>Código final de <code>package.json</code> (lo cambiaron el punto 2 y el punto 4 de la preparación)</summary>
 
    ```json
    {
      "name": "lab07-pruebas",
-     "private": true,
      "version": "0.0.0",
+     "private": true,
      "type": "module",
      "scripts": {
        "dev": "vite",
        "build": "vite build",
        "preview": "vite preview --host 127.0.0.1 --port 4177 --strictPort",
-       "test": "vitest",
+       "test:unit": "vitest",
        "test:run": "vitest run",
        "test:coverage": "vitest run --coverage",
-       "cy:run": "cypress run --browser chrome",
-       "e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4177 cy:run"
+       "prepare": "cypress install",
+       "cy:run": "cypress run --e2e --browser chrome",
+       "test:e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4177 cy:run"
      },
      "dependencies": {
        "vue": "^3.5.13"
      },
      "devDependencies": {
-       "@vitejs/plugin-vue": "^5.2.2",
-       "@vitest/coverage-v8": "3.2.4",
-       "@vue/test-utils": "2.4.6",
-       "cypress": "14.5.4",
-       "jsdom": "26.1.0",
-       "start-server-and-test": "2.0.12",
-       "vite": "^6.3.1",
-       "vitest": "3.2.4"
+       "@vitejs/plugin-vue": "^5.2.3",
+       "@vitest/coverage-v8": "3.2.7",
+       "@vue/test-utils": "^2.4.6",
+       "cypress": "^14.2.1",
+       "jsdom": "^26.0.0",
+       "start-server-and-test": "^2.0.11",
+       "vite": "^6.2.4",
+       "vite-plugin-vue-devtools": "^7.7.2",
+       "vitest": "3.2.7"
      }
    }
    ```
 
-Los demás archivos se escriben una sola vez y completos: el bloque de cada paso ya es su versión final. En `ejercicio-resuelto/` también está el `README.md` en inglés que crea la plantilla de Vite; la guía no lo toca.
+Los demás archivos se escriben una sola vez y completos: el bloque de cada paso ya es su versión final. En `ejercicio-resuelto/` también están los archivos de create-vue que la guía no toca (`vite.config.js`, `jsconfig.json`, `cypress/support/`, `cypress/fixtures/example.json`, `.vscode/` y el `README.md` en inglés).
 
 </details>
 
@@ -646,24 +666,27 @@ npm run test:run         # corre las pruebas unitarias y de componentes
 
 | Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
-| El creador pregunta `Select a framework` y no crea nada | Se usó `npm create vite@6.4.1 lab07-pruebas -- --template vue` en PowerShell, que se come el `--` | Pulsa `Ctrl + C` y usa el comando de la guía: `npx --yes create-vite@6.4.1 lab07-pruebas --template vue` |
+| El creador pregunta `Select features to include in your project` en vez de crear el proyecto | Faltan las opciones, o se escribieron después de un `--` que PowerShell se come (`npm create vue@latest lab07-pruebas -- --vitest`) | Pulsa `Ctrl + C` y usa el comando de la guía: `npx --yes create-vue@3.16.4 lab07-pruebas --bare --vitest --cypress` |
+| `npm warn EBADENGINE Unsupported engine` al crear el proyecto | Se usó `npm create vue@latest`: las versiones más nuevas de create-vue exigen Node.js 22.18 o superior y crean el proyecto con Vite 7 | Usa la versión fijada de la guía, `create-vue@3.16.4`, que funciona desde Node.js 20 |
 | La terminal muestra `Local: http://localhost:5173/` y no 5177 | Se usó `npm run dev -- --port 5177` en PowerShell, que se come el `--` | Detén el servidor con `Ctrl + C` y usa `npx vite --port 5177` |
-| `ReferenceError: document is not defined` | Vitest corre sin jsdom | Revisa que `vite.config.js` importe `defineConfig` de `vitest/config` y tenga `environment: 'jsdom'` |
-| `Failed to resolve import "./components/HelloWorld.vue"` | Borraste `HelloWorld.vue` antes de reemplazar `App.vue` | Reemplaza `src/App.vue` con el del paso 5 |
-| `ERROR: Coverage for lines (...)` o `for functions (75%) does not meet global threshold (80%)` | Hay código que ninguna prueba ejecuta: `HelloWorld.vue` sin borrar, o falta la prueba del favorito en `App.test.js` y `alternar` nunca corre | Abre `coverage/index.html`, mira qué archivo baja el promedio y pruébalo o bórralo si sobra |
-| `No version of Cypress is installed` o `the Cypress binary is missing` | La descarga de Cypress no terminó o npm no la ejecutó al instalar | Ejecuta `npx cypress install` y repite `npm run e2e` |
+| `ReferenceError: document is not defined` | Vitest corre sin jsdom | Revisa que `vitest.config.js` conserve `environment: 'jsdom'` |
+| `MISSING DEPENDENCY  Cannot find dependency '@vitest/coverage-v8'` o aviso de versiones distintas | Falta el punto 2 de la preparación, o Vitest y la cobertura quedaron en versiones diferentes | Repite `npm install -D -E vitest@3.2.7 @vitest/coverage-v8@3.2.7` |
+| `AssertionError: expected '...' to contain 'You did it!'` | Quedó la prueba de ejemplo de create-vue | Reemplaza `src/__tests__/App.spec.js` con el del paso 5 |
+| `ERROR: Coverage for lines (...)` o `for functions (75%) does not meet global threshold (80%)` | Hay código que ninguna prueba ejecuta: por ejemplo, falta la prueba del favorito en `App.spec.js` y `alternar` nunca corre | Abre `coverage/index.html`, mira qué archivo baja el promedio y pruébalo o bórralo si sobra |
+| `Can't run because no spec files were found` o falla `My First Test` | Se borró la E2E del catálogo, o quedó `example.cy.js` | Revisa el paso 7: debe existir solo `cypress/e2e/catalogo.cy.js` |
+| `No version of Cypress is installed` o `the Cypress binary is missing` | La descarga de Cypress no terminó | Ejecuta `npx cypress install` y repite `npm run test:e2e` |
 | `Browser: chrome was not found on your system` | Chrome no está instalado | Instálalo, o quita `--browser chrome` del script `cy:run` para usar el navegador de Cypress |
 | `cy.wait() timed out waiting ... for the 1st request to the route: productos` | La dirección interceptada no coincide con la real | Corre el opcional `npx cypress open` y mira la petición en el panel de comandos, o abre `npm run preview` en Chrome con `F12`, pestaña **Network** (Red), y compara la dirección con `**/api/productos.json` |
 | `Port 4177 is already in use` | Quedó abierto un `preview` | Ciérralo con `Ctrl + C` en su terminal y repite |
 
 ## Limpieza
 
-- Detén con `Ctrl + C` cualquier `npx vite`, `npm test` o `npm run preview` que siga abierto. `npm run e2e` apaga solo su servidor.
+- Detén con `Ctrl + C` cualquier `npx vite`, `npm run test:unit` o `npm run preview` que siga abierto. `npm run test:e2e` apaga solo su servidor.
 - Para recuperar espacio, borra la carpeta `coverage` (y `node_modules` si no vas a volver al proyecto). El capítulo 8 arranca en otra carpeta vacía y trae su propio código.
 
 ## Ejercicios de reserva
 
-**Básico.** Agrega a `filtrarProductos.test.js` un caso que compruebe que `'  monitor  '`, con espacios alrededor, encuentra solo el producto 3.
+**Básico.** Agrega a `src/__tests__/filtrarProductos.spec.js` un caso que compruebe que `'  monitor  '`, con espacios alrededor, encuentra solo el producto 3.
 
 <details>
 <summary>Solución</summary>
@@ -720,3 +743,4 @@ it('avisa cuando ningún producto coincide', () => {
 |---|---|---|---|
 | 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita para construir desde una carpeta vacía con Vite 6.4: estrategia de pruebas, Vitest, Vue Test Utils y Cypress con todo el código en la guía |
 | 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI (interfaz de línea de comandos) en Windows 11 (PowerShell) y Linux: proyecto con `npx --yes create-vite@6.4.1`, servidor con `npx vite --port 5177` y `preview` en el puerto propio 4177; `npx cypress install` explícito; prueba nueva del favorito en `App.test.js` (sin ella la cobertura de funciones quedaba en 75 %); borrado de `HelloWorld.vue` igual en los tres sistemas; mensaje real de Vitest en el paso 3; conceptos `enableAutoUnmount`, `mockResolvedValue`, `mockRejectedValue`, `toHaveBeenCalledOnce` y `start-server-and-test`; tiempos 3 y 10 minutos en los pasos 1 y 5; el capítulo 8 ya no depende de este proyecto |
+| 2.2 | 2026-10-17 | Andrés Eduardo García Márquez | Proyecto creado con create-vue, la herramienta oficial de Vue, como enseña el manual: `npx --yes create-vue@3.16.4 lab07-pruebas --bare --vitest --cypress`; tabla de lo que trae el proyecto y qué se reemplaza o borra; configuración de pruebas en `vitest.config.js` y pruebas en `src/__tests__/*.spec.js`; scripts con los nombres de create-vue (`test:unit`, `test:e2e`, `prepare`); solo `@vitest/coverage-v8` se instala aparte; ya no se borra `HelloWorld.vue` ni se importa `style.css`. Validada por CLI en Windows 11 con Cypress real y en Linux |
