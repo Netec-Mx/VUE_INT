@@ -1,6 +1,4 @@
-# 4 Practica: refactorizar componentes a Composition API y crear composables
-
-## Metadatos
+# Práctica 2.4: refactorizar componentes a Composition API y crear composables
 
 | Campo | Valor |
 |---|---|
@@ -8,1174 +6,540 @@
 | Complejidad | Media |
 | Nivel de Bloom | Crear |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio transformarás la lógica compartida de ProjectHub desde un módulo de estado centralizado hacia composables cohesionados basados en Composition API. Crearás composables para filtrado, selección, preferencias visuales y estados asíncronos, conservando la reactividad y el comportamiento optimizado del laboratorio anterior.
+ProjectHub es una lista de tareas con buscador, filtro, vista compacta que se recuerda y carga simulada desde un servidor. Empiezas con la versión clásica en Options API (interfaz de opciones), donde cada tarea del código queda repartida entre `data`, `computed`, `watch` y `mounted`. La refactorizas (la reorganizas por dentro sin cambiar lo que hace) a Composition API (interfaz de composición): cuatro composables, un contexto con `provide` y una clave `Symbol`, y un componente renderless que entrega la lista por un slot.
 
-También implementarás un contexto distribuido con `provide/inject` y un componente renderless que expone datos y acciones mediante un slot con alcance. El resultado será una base reutilizable para la autenticación, las rutas protegidas y los guards del siguiente bloque.
+**Resultado final:** la columna "Después: Composition API" busca, filtra, marca una tarea como seleccionada, recarga y recuerda la vista compacta al recargar la página, y `npm run build` termina sin errores.
 
-## Objetivos de aprendizaje
+## Objetivos
 
-Al finalizar el laboratorio podrás:
+- Extraer cada tarea del componente (carga, buscador, selección, preferencia) a su propio composable.
+- Compartir datos con `provide` e `inject` usando una clave `Symbol` y un error claro si falta el proveedor.
+- Construir un componente renderless que entrega datos y acciones por un slot con datos.
 
-- [ ] Extraer lógica de interfaz y estado compartido a composables con APIs explícitas.
-- [ ] Implementar filtros, ordenamiento y contadores derivados mediante `computed()`.
-- [ ] Gestionar selección de tareas y navegación mediante un composable desacoplado.
-- [ ] Persistir preferencias visuales de forma controlada usando `watch()` y `onScopeDispose()`.
-- [ ] Usar `provide/inject` y un componente renderless con slots con alcance para evitar prop drilling.
+## Conceptos que usas
 
-## Prerrequisitos
+Todos se vieron en las diapositivas del capítulo 2, salvo el que se indica:
 
-### Conocimientos requeridos
+- Options API (`data`, `computed`, `watch`, `mounted`) frente a `<script setup>`.
+- `ref`, `computed`, `watch` y el hook (gancho) `onMounted`.
+- Composable: función `useAlgo()` que crea su propio estado en cada llamada.
+- `provide`, `inject`, `readonly` y claves con `Symbol`.
+- Renderless: componente que no dibuja nada y entrega datos por `<slot>`; se recibe con `v-slot`.
+- **Repaso del capítulo 1:** `computed` guarda un resultado y solo lo recalcula si cambia lo que usa. En el laboratorio 1 compartiste el catálogo con `provide('catalogo')`, una clave de texto; hoy la clave será un `Symbol`, que no puede chocar con otra.
 
-- Haber completado el laboratorio `01-00-01` con la SPA ProjectHub optimizada.
-- Comprender el uso de `ref`, `computed`, `watch`, `watchEffect` y `onScopeDispose`.
-- Distinguir entre estado local, estado compartido, estado derivado y efectos secundarios.
-- Conocer la sintaxis de `<script setup>` en Vue 3.
-- Comprender el patrón de slots con alcance (`v-slot` o `#default`).
+## Antes de empezar
 
-### Acceso y entorno requeridos
+- **Node.js 20 o 22** (el programa que ejecuta JavaScript fuera del navegador). Compruébalo con `node -v`: debe empezar por `v20.` o `v22.`.
+- Google Chrome y Visual Studio Code. Si VS Code ofrece la extensión **Vue (Official)**, acéptala.
+- No necesitas el laboratorio 1 ni descargar nada: el proyecto se crea desde cero.
 
-- Acceso local al repositorio de la aplicación `projecthub-spa`.
-- Permisos para ejecutar comandos de Node.js y npm.
-- Navegador Google Chrome instalado.
-- Puerto local `5173` disponible.
-- No iniciar servicios en el puerto `3000`; las solicitudes simuladas continúan siendo interceptadas por MSW en el navegador.
+## Preparación (4 minutos)
 
-## Entorno del laboratorio
-
-### Software esperado
-
-| Herramienta | Versión esperada |
-|---|---:|
-| Node.js | 22.14.0 |
-| npm | 10.9.2 |
-| Vue | 3.5.13 |
-| Vite | 6.1.0 |
-| Vue Router | 4.5.0 |
-| Pinia | 3.0.1 |
-| Visual Studio Code | 1.97.2 o superior |
-| Google Chrome | 132 o superior |
-
-### Preparación inicial
-
-Abre una terminal y sitúate en el directorio obligatorio.
-
-```bash
-cd ../projecthub-spa
-```
-
-En Windows:
-
-```powershell
-cd C:\workspace\vue-intermedio-labs\projecthub-spa
-```
-
-Comprueba las versiones instaladas:
-
-```bash
-node --version
-npm --version
-```
-
-Instala las dependencias únicamente si todavía no existe `node_modules`:
-
-```bash
-npm install
-```
-
-Comprueba el estado inicial del repositorio:
-
-```bash
-git status
-git branch --show-current
-```
-
-La salida esperada de la rama es:
-
-```text
-main
-```
-
-> No crees ramas adicionales. El curso conserva una única rama de trabajo denominada `main`.
-
----
-
-## Desarrollo paso a paso
-
-### Paso 1. Inspeccionar el estado centralizado existente
-
-**Objetivo:** Identificar las responsabilidades que deben salir de `src/state/projectHubState.js`.
-
-**Instrucciones:**
-
-1. Abre el archivo de estado creado en el laboratorio anterior:
+1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto con Vite 6.4 (la herramienta que arma y sirve el proyecto). El comando es igual en Windows (PowerShell), macOS y Linux:
 
    ```bash
-   code src/state/projectHubState.js
+   npx --yes create-vite@6.4 lab02-composables --template vue
+   cd lab02-composables
+   npm install
    ```
 
-2. Identifica las responsabilidades que actualmente concentra. Normalmente encontrarás una combinación de:
-   - Lista de tareas.
-   - Búsqueda por texto.
-   - Filtros de estado.
-   - Ordenamiento.
-   - Tarea seleccionada.
-   - Preferencias de densidad o tema.
-   - Estado de carga, error y éxito.
-   - Funciones para cargar o refrescar tareas.
+   `--yes` acepta descargar el creador de proyectos de Vite sin preguntar y `--template vue` elige la plantilla de Vue, así que no te hace preguntas. `npm install` deja instalado Vite 6.4 aunque `package.json` diga `^6.3.1`: el `^` admite cualquier 6.x más reciente.
 
-3. Crea la estructura de directorios para los composables y las claves de inyección:
+2. Abre la carpeta `lab02-composables` en VS Code. Reemplaza todo el contenido de `src/main.js` por este. Ya no importa `style.css`; los estilos los pones tú en el paso 1:
+
+   ```js
+   import { createApp } from 'vue'   // función que crea la aplicación
+   import App from './App.vue'       // componente raíz, el primero que se dibuja
+
+   createApp(App).mount('#app')      // crea la aplicación y la dibuja en <div id="app"> de index.html
+   ```
+
+3. Arranca el servidor de desarrollo en el puerto 5172 y deja esa terminal abierta. `npx vite` ejecuta el Vite instalado en el proyecto; el comando es igual en PowerShell, macOS y Linux:
 
    ```bash
-   mkdir -p src/composables src/keys src/components/tasks
+   npx vite --port 5172
    ```
 
-4. Conserva temporalmente `src/state/projectHubState.js` como referencia, pero no lo importes en los archivos nuevos.
+**Qué debes ver:** en la terminal, `Local: http://localhost:5172/`. Ábrelo en Chrome: aparece la página de ejemplo de Vite, sin estilos (los quitaste al cambiar `main.js`).
 
-5. Crea los archivos que se implementarán durante el laboratorio:
+## Paso 1. El punto de partida en Options API (5 minutos)
 
-   ```bash
-   touch src/composables/useProjectFilters.js
-   touch src/composables/useTaskSelection.js
-   touch src/composables/useLocalPreferences.js
-   touch src/composables/useAsyncState.js
-   touch src/keys/projectHub.js
-   touch src/components/tasks/TaskCollectionProvider.vue
-   ```
+**Qué vas a hacer y por qué:** escribir la versión clásica para ver el problema que resuelve la Composition API: cada tarea del componente queda partida en varias secciones.
 
-**Resultado esperado:**
-
-La estructura relevante del proyecto debe incluir los nuevos archivos:
-
-```text
-src/
-├── composables/
-│   ├── useAsyncState.js
-│   ├── useLocalPreferences.js
-│   ├── useProjectFilters.js
-│   └── useTaskSelection.js
-├── components/
-│   └── tasks/
-│       └── TaskCollectionProvider.vue
-├── keys/
-│   └── projectHub.js
-└── state/
-    └── projectHubState.js
-```
-
-**Verificación:**
-
-Ejecuta:
-
-```bash
-find src/composables src/keys src/components/tasks -type f
-```
-
-En Windows PowerShell:
-
-```powershell
-Get-ChildItem src/composables, src/keys, src/components/tasks -Recurse -File
-```
-
-Confirma que existen los cinco archivos nuevos.
-
----
-
-### Paso 2. Crear el composable de filtros y ordenamiento
-
-**Objetivo:** Encapsular el filtrado, ordenamiento y conteo de tareas en `useProjectFilters()`.
-
-**Instrucciones:**
-
-1. Abre `src/composables/useProjectFilters.js`.
-
-2. Implementa el composable siguiente. Recibe una referencia reactiva de tareas para que pueda trabajar con listas reemplazables después de una carga asíncrona.
+1. Crea `src/datos.js`. Cópialo tal cual, no es el tema de hoy:
 
    ```js
-   import { computed, ref } from 'vue'
+   // Datos de ejemplo de ProjectHub: cópialo tal cual, no es el tema de hoy
+   const tareas = [
+     { id: 1, titulo: 'Diseñar la pantalla de inicio', hecha: true },
+     { id: 2, titulo: 'Conectar la API de proyectos', hecha: false },
+     { id: 3, titulo: 'Escribir pruebas del buscador', hecha: false },
+     { id: 4, titulo: 'Revisar accesibilidad del menú', hecha: true },
+     { id: 5, titulo: 'Publicar la versión 1.0', hecha: false }
+   ]
 
-   export function useProjectFilters(tasks) {
-     const searchTerm = ref('')
-     const statusFilter = ref('all')
-     const sortBy = ref('updatedAt-desc')
-
-     const normalizedSearchTerm = computed(() =>
-       searchTerm.value.trim().toLocaleLowerCase()
-     )
-
-     const filteredTasks = computed(() => {
-       const result = tasks.value.filter((task) => {
-         const matchesSearch =
-           !normalizedSearchTerm.value ||
-           task.title.toLocaleLowerCase().includes(normalizedSearchTerm.value)
-
-         const matchesStatus =
-           statusFilter.value === 'all' ||
-           task.status === statusFilter.value
-
-         return matchesSearch && matchesStatus
-       })
-
-       return [...result].sort((firstTask, secondTask) => {
-         if (sortBy.value === 'title-asc') {
-           return firstTask.title.localeCompare(secondTask.title)
-         }
-
-         if (sortBy.value === 'priority-desc') {
-           return secondTask.priority - firstTask.priority
-         }
-
-         return new Date(secondTask.updatedAt) - new Date(firstTask.updatedAt)
-       })
-     })
-
-     const totalTasks = computed(() => tasks.value.length)
-
-     const visibleTasks = computed(() => filteredTasks.value.length)
-
-     const completedTasks = computed(() =>
-       tasks.value.filter((task) => task.status === 'completed').length
-     )
-
-     function clearFilters() {
-       searchTerm.value = ''
-       statusFilter.value = 'all'
-       sortBy.value = 'updatedAt-desc'
-     }
-
-     return {
-       searchTerm,
-       statusFilter,
-       sortBy,
-       filteredTasks,
-       totalTasks,
-       visibleTasks,
-       completedTasks,
-       clearFilters
-     }
+   // Simula pedir las tareas a un servidor: responde después de 800 milisegundos
+   export function pedirTareas() {
+     return new Promise((resolver) =>
+       setTimeout(() => resolver(tareas.map((t) => ({ ...t }))), 800))  // entrega copias: el original no cambia
    }
    ```
 
-3. Revisa que el composable no cargue datos, no acceda al DOM y no persista información. Su única responsabilidad es transformar la colección recibida y mantener el estado de filtros.
+2. Crea `src/TareasOpciones.vue`. Lee los comentarios: cada línea dice a qué tarea pertenece (carga, buscador o preferencia):
 
-4. Observa que `filteredTasks` es un `computed()`, no una lista actualizada manualmente. Esto evita duplicar el estado y conserva la optimización reactiva.
+   ```vue
+   <!-- Punto de partida en Options API: cada tarea del componente queda repartida por tipo de código -->
+   <script>
+   import { pedirTareas } from './datos.js'                // la carga simulada
 
-**Resultado esperado:**
-
-El composable ofrece una API explícita:
-
-| Elemento | Responsabilidad |
-|---|---|
-| `searchTerm` | Texto de búsqueda editable por la interfaz |
-| `statusFilter` | Estado de tarea seleccionado |
-| `sortBy` | Criterio de ordenamiento |
-| `filteredTasks` | Lista derivada y ordenada |
-| `totalTasks` | Total de tareas cargadas |
-| `visibleTasks` | Cantidad de tareas visibles |
-| `completedTasks` | Cantidad global de tareas completadas |
-| `clearFilters` | Restablecimiento de filtros |
-
-**Verificación:**
-
-Comprueba que no existen efectos secundarios en el composable:
-
-```bash
-grep -nE "fetch|localStorage|window|document" src/composables/useProjectFilters.js
-```
-
-El comando no debe devolver resultados.
-
----
-
-### Paso 3. Crear el composable de selección y navegación
-
-**Objetivo:** Desacoplar la selección de tareas de Vue Router mediante una función de navegación inyectable.
-
-**Instrucciones:**
-
-1. Abre `src/composables/useTaskSelection.js`.
-
-2. Implementa el composable:
-
-   ```js
-   import { computed, ref } from 'vue'
-
-   export function useTaskSelection({ navigate } = {}) {
-     const selectedTaskId = ref(null)
-
-     const hasSelection = computed(() => selectedTaskId.value !== null)
-
-     function isSelected(taskId) {
-       return selectedTaskId.value === taskId
-     }
-
-     async function selectTask(task) {
-       selectedTaskId.value = task.id
-
-       if (navigate) {
-         await navigate(task.id)
-       }
-     }
-
-     function clearSelection() {
-       selectedTaskId.value = null
-     }
-
-     return {
-       selectedTaskId,
-       hasSelection,
-       isSelected,
-       selectTask,
-       clearSelection
-     }
-   }
-   ```
-
-3. Observa que el composable no importa `useRouter()` ni `useRoute()`. Esta decisión mantiene la lógica reutilizable:
-   - Un componente puede navegar mediante Vue Router.
-   - Una prueba unitaria puede entregar una función simulada.
-   - Otro consumidor puede seleccionar tareas sin cambiar la URL.
-
-4. El contrato del argumento `navigate` es el siguiente:
-
-   ```js
-   async function navigate(taskId) {
-     // Navegación o sincronización externa.
-   }
-   ```
-
-5. La selección se actualiza antes de navegar. De este modo, la interfaz refleja inmediatamente la intención del usuario, incluso si la navegación tarda una fracción de segundo.
-
-**Resultado esperado:**
-
-`useTaskSelection()` mantiene el estado de selección y delega la navegación a una dependencia externa en lugar de acoplarse al router.
-
-**Verificación:**
-
-Ejecuta:
-
-```bash
-grep -n "vue-router" src/composables/useTaskSelection.js
-```
-
-No debe aparecer ninguna importación ni referencia a Vue Router.
-
----
-
-### Paso 4. Crear el composable de preferencias locales
-
-**Objetivo:** Persistir preferencias visuales de forma controlada y limpiar el observador al destruir el ámbito reactivo.
-
-**Instrucciones:**
-
-1. Abre `src/composables/useLocalPreferences.js`.
-
-2. Implementa el composable:
-
-   ```js
-   import { onScopeDispose, ref, watch } from 'vue'
-
-   const DEFAULT_PREFERENCES = {
-     compactMode: false,
-     theme: 'light'
-   }
-
-   function readPreferences(storageKey) {
-     try {
-       const storedValue = window.localStorage.getItem(storageKey)
-
-       if (!storedValue) {
-         return { ...DEFAULT_PREFERENCES }
-       }
-
+   export default {
+     data() {                                              // 1. DATOS de todas las tareas, juntos
        return {
-         ...DEFAULT_PREFERENCES,
-         ...JSON.parse(storedValue)
+         tareas: [],                                       // carga: la lista que llega
+         cargando: true,                                   // carga: bandera de espera
+         texto: '',                                        // buscador: lo que se escribe
+         compacta: localStorage.getItem('compacta') === 'true' // preferencia: lee lo guardado antes
        }
-     } catch {
-       return { ...DEFAULT_PREFERENCES }
-     }
-   }
-
-   export function useLocalPreferences(storageKey = 'projecthub:preferences') {
-     const preferences = ref(readPreferences(storageKey))
-
-     const stopPersistence = watch(
-       preferences,
-       (value) => {
-         try {
-           window.localStorage.setItem(storageKey, JSON.stringify(value))
-         } catch {
-           // La interfaz sigue funcionando si el almacenamiento no está disponible.
-         }
-       },
-       { deep: true }
-     )
-
-     function toggleCompactMode() {
-       preferences.value.compactMode = !preferences.value.compactMode
-     }
-
-     function setTheme(theme) {
-       preferences.value.theme = theme === 'dark' ? 'dark' : 'light'
-     }
-
-     function resetPreferences() {
-       preferences.value = { ...DEFAULT_PREFERENCES }
-     }
-
-     onScopeDispose(() => {
-       stopPersistence()
-     })
-
-     return {
-       preferences,
-       toggleCompactMode,
-       setTheme,
-       resetPreferences
-     }
-   }
-   ```
-
-3. Este composable usa `ref()` para permitir reemplazar completamente el objeto de preferencias durante `resetPreferences()`.
-
-4. El efecto secundario de `localStorage` se realiza dentro de `watch()`, no en un `computed()`. Las propiedades calculadas deben permanecer libres de efectos externos.
-
-5. `onScopeDispose()` registra la limpieza en el ámbito del componente que invoque el composable. Aunque Vue detiene automáticamente los observadores creados dentro de `setup()`, registrar la liberación expresa la intención y permite reutilizar el composable en ámbitos de efecto avanzados.
-
-**Resultado esperado:**
-
-Las preferencias quedan almacenadas bajo la clave:
-
-```text
-projecthub:preferences
-```
-
-El valor almacenado tendrá una forma similar a:
-
-```json
-{
-  "compactMode": true,
-  "theme": "dark"
-}
-```
-
-**Verificación:**
-
-Cuando la aplicación esté en ejecución, abre Chrome DevTools:
-
-1. Presiona `F12`.
-2. Abre **Application**.
-3. Selecciona **Local Storage**.
-4. Abre `http://127.0.0.1:5173`.
-5. Confirma que aparece la clave `projecthub:preferences` después de cambiar una preferencia.
-
----
-
-### Paso 5. Crear el composable para estados asíncronos
-
-**Objetivo:** Centralizar los estados de carga, éxito, error y cancelación de operaciones asíncronas.
-
-**Instrucciones:**
-
-1. Abre `src/composables/useAsyncState.js`.
-
-2. Implementa el composable:
-
-   ```js
-   import { computed, onScopeDispose, ref } from 'vue'
-
-   export function useAsyncState() {
-     const status = ref('idle')
-     const data = ref(null)
-     const error = ref(null)
-     let controller = null
-
-     const isIdle = computed(() => status.value === 'idle')
-     const isLoading = computed(() => status.value === 'loading')
-     const isSuccess = computed(() => status.value === 'success')
-     const isError = computed(() => status.value === 'error')
-
-     async function execute(operation) {
-       controller?.abort()
-       controller = new AbortController()
-
-       status.value = 'loading'
-       error.value = null
-
-       try {
-         const result = await operation(controller.signal)
-
-         data.value = result
-         status.value = 'success'
-
-         return result
-       } catch (caughtError) {
-         if (caughtError.name === 'AbortError') {
-           status.value = 'idle'
-           return null
-         }
-
-         error.value = caughtError
-         status.value = 'error'
-
-         throw caughtError
-       }
-     }
-
-     function reset() {
-       controller?.abort()
-       controller = null
-       status.value = 'idle'
-       data.value = null
-       error.value = null
-     }
-
-     onScopeDispose(() => {
-       controller?.abort()
-     })
-
-     return {
-       status,
-       data,
-       error,
-       isIdle,
-       isLoading,
-       isSuccess,
-       isError,
-       execute,
-       reset
-     }
-   }
-   ```
-
-3. Comprende el flujo implementado:
-   - `execute()` cancela una operación anterior antes de iniciar otra.
-   - Cada operación recibe un `AbortSignal`.
-   - Un error de cancelación no se presenta como error de interfaz.
-   - Otros errores se guardan y se propagan para que el componente pueda decidir cómo mostrarlos.
-   - `onScopeDispose()` cancela solicitudes pendientes al desmontar la vista.
-
-4. Si tu servicio existente usa `fetch`, asegúrate de recibir y reenviar la señal:
-
-   ```js
-   export async function fetchProjectTasks({ signal } = {}) {
-     const response = await fetch('/api/tasks', { signal })
-
-     if (!response.ok) {
-       throw new Error('Unable to load tasks')
-     }
-
-     return response.json()
-   }
-   ```
-
-**Resultado esperado:**
-
-El composable ofrece indicadores reactivos para representar la interfaz:
-
-```text
-idle → loading → success
-idle → loading → error
-loading → idle (cuando se cancela)
-```
-
-**Verificación:**
-
-Comprueba que existe limpieza de solicitudes pendientes:
-
-```bash
-grep -n "onScopeDispose" src/composables/useAsyncState.js
-```
-
-La salida debe mostrar la importación y el bloque de cancelación.
-
----
-
-### Paso 6. Definir las claves de inyección y el contexto compartido
-
-**Objetivo:** Crear símbolos de inyección seguros para distribuir el contexto de ProjectHub y una sesión simulada sin prop drilling.
-
-**Instrucciones:**
-
-1. Abre `src/keys/projectHub.js`.
-
-2. Implementa las claves y el helper de consumo:
-
-   ```js
-   import { inject } from 'vue'
-
-   export const projectHubKey = Symbol('projectHub')
-   export const projectHubSessionKey = Symbol('projectHubSession')
-
-   export function useProjectHubContext() {
-     const context = inject(projectHubKey, null)
-
-     if (!context) {
-       throw new Error(
-         'useProjectHubContext debe utilizarse dentro de ProjectHubView.'
-       )
-     }
-
-     return context
-   }
-   ```
-
-3. Usa `Symbol()` en vez de una cadena. Esto reduce el riesgo de colisiones con otros contextos inyectados.
-
-4. El helper `useProjectHubContext()` evita errores silenciosos. Si un componente consumidor se monta fuera del proveedor, el error indica inmediatamente la causa arquitectónica.
-
-5. La clave `projectHubSessionKey` prepara el contexto de sesión simulada que será ampliado y consumido por rutas y guards en el laboratorio `03-00-01`.
-
-**Resultado esperado:**
-
-El archivo expone dos claves únicas y una función segura para consumir el contexto de ProjectHub.
-
-**Verificación:**
-
-Ejecuta:
-
-```bash
-cat src/keys/projectHub.js
-```
-
-Confirma que las claves se crean con `Symbol('projectHub')` y `Symbol('projectHubSession')`.
-
----
-
-### Paso 7. Proveer el contexto desde `ProjectHubView.vue`
-
-**Objetivo:** Componer los nuevos composables en la vista principal y distribuirlos mediante `provide()`.
-
-**Instrucciones:**
-
-1. Abre la vista principal. Según la estructura del laboratorio anterior, normalmente será:
-
-   ```bash
-   code src/views/ProjectHubView.vue
-   ```
-
-2. Elimina la importación de `projectHubState.js`.
-
-3. Adapta el bloque `<script setup>` para crear el contexto. Conserva la función o servicio de carga que ya estuviera implementado en el laboratorio anterior. El siguiente ejemplo supone que existe `fetchProjectTasks()` en `src/services/projectService.js`.
-
-   ```vue
-   <script setup>
-   import { onMounted, provide, readonly, ref } from 'vue'
-   import { useRoute, useRouter } from 'vue-router'
-   import TaskCollectionProvider from '@/components/tasks/TaskCollectionProvider.vue'
-   import { useAsyncState } from '@/composables/useAsyncState'
-   import { useLocalPreferences } from '@/composables/useLocalPreferences'
-   import { useProjectFilters } from '@/composables/useProjectFilters'
-   import { useTaskSelection } from '@/composables/useTaskSelection'
-   import {
-     projectHubKey,
-     projectHubSessionKey
-   } from '@/keys/projectHub'
-   import { fetchProjectTasks } from '@/services/projectService'
-
-   const router = useRouter()
-   const route = useRoute()
-
-   const tasks = ref([])
-
-   const session = ref({
-     user: {
-       id: 'demo-user',
-       name: 'Ada Lovelace',
-       role: 'member'
      },
-     isAuthenticated: true
-   })
-
-   const filters = useProjectFilters(tasks)
-   const preferences = useLocalPreferences()
-   const asyncState = useAsyncState()
-
-   const selection = useTaskSelection({
-     navigate: (taskId) =>
-       router.push({
-         query: {
-           ...route.query,
-           task: taskId
-         }
-       })
-   })
-
-   async function reloadTasks() {
-     return asyncState.execute(async (signal) => {
-       const loadedTasks = await fetchProjectTasks({ signal })
-       tasks.value = loadedTasks
-       return loadedTasks
-     })
+     computed: {                                           // 2. CÁLCULOS
+       visibles() {                                        // buscador: filtra por texto
+         const buscado = this.texto.toLowerCase()          // this: así se llega a los datos en Options API
+         return this.tareas.filter((t) => t.titulo.toLowerCase().includes(buscado)) // deja las que coinciden
+       }
+     },
+     watch: {                                              // 3. EFECTOS
+       compacta(nuevo) {                                   // preferencia: se ejecuta cuando cambia
+         localStorage.setItem('compacta', String(nuevo))   // preferencia: la guarda en el navegador
+       }
+     },
+     async mounted() {                                     // 4. HOOKS: cuando el componente aparece
+       this.tareas = await pedirTareas()                   // carga: pide las tareas y espera
+       this.cargando = false                               // carga: termina la espera
+     }
    }
-
-   const projectHubContext = {
-     tasks: readonly(tasks),
-     filters,
-     preferences,
-     asyncState,
-     selection,
-     reloadTasks
-   }
-
-   provide(projectHubKey, projectHubContext)
-   provide(projectHubSessionKey, readonly(session))
-
-   onMounted(() => {
-     reloadTasks().catch(() => {
-       // El mensaje se representa mediante asyncState.error.
-     })
-   })
    </script>
-   ```
 
-4. Si tu servicio anterior se llama de otra manera, conserva su importación y adapta solamente su llamada para aceptar `{ signal }`.
-
-5. No conviertas `tasks` en un objeto global mutable. Se entrega como `readonly(tasks)` para que los consumidores puedan leer las tareas, pero no reemplazarlas directamente. La vista proveedora mantiene la responsabilidad de cargar y actualizar la colección.
-
-6. Agrega una estructura básica de plantilla que use el proveedor renderless. El componente se implementará en el siguiente paso:
-
-   ```vue
    <template>
-     <section
-       class="project-hub"
-       :class="{
-         'project-hub--compact': preferences.preferences.value.compactMode
-       }"
-     >
-       <header class="project-hub__header">
-         <div>
-           <h1>ProjectHub</h1>
-           <p v-if="session.user">
-             Sesión simulada: {{ session.user.name }}
-           </p>
-         </div>
-
-         <button
-           type="button"
-           @click="preferences.toggleCompactMode"
-         >
-           Cambiar densidad
-         </button>
-       </header>
-
-       <p v-if="asyncState.isLoading" role="status">
-         Cargando tareas…
-       </p>
-
-       <p v-else-if="asyncState.isError" role="alert">
-         No fue posible cargar las tareas:
-         {{ asyncState.error?.message }}
-       </p>
-
-       <TaskCollectionProvider v-else>
-         <template #default="collection">
-           <!-- El contenido se completará en el paso siguiente. -->
-           <p aria-live="polite">
-             Mostrando {{ collection.visibleTasks }} de
-             {{ collection.totalTasks }} tareas.
-           </p>
-         </template>
-       </TaskCollectionProvider>
+     <section :class="{ compacta }">
+       <h2>Antes: Options API</h2>
+       <input v-model="texto" aria-label="Buscar tarea" placeholder="Buscar..." />
+       <label><input type="checkbox" v-model="compacta" /> Vista compacta</label>
+       <p v-if="cargando">Cargando...</p>
+       <ul v-else>
+         <li v-for="t in visibles" :key="t.id">{{ t.hecha ? '✔' : '○' }} {{ t.titulo }}</li>
+       </ul>
      </section>
    </template>
    ```
 
-**Resultado esperado:**
-
-`ProjectHubView.vue` se convierte en el punto de composición de la funcionalidad:
-
-```text
-ProjectHubView
-├── tasks
-├── useProjectFilters(tasks)
-├── useTaskSelection(navigate)
-├── useLocalPreferences()
-├── useAsyncState()
-├── provide(projectHubKey, contexto)
-└── provide(projectHubSessionKey, sesión simulada)
-```
-
-**Verificación:**
-
-Busca referencias al estado anterior:
-
-```bash
-grep -R "projectHubState" -n src
-```
-
-La única coincidencia permitida durante la transición puede ser el propio archivo antiguo. No debe existir una importación activa desde componentes o vistas.
-
----
-
-### Paso 8. Construir el componente renderless `TaskCollectionProvider`
-
-**Objetivo:** Reutilizar la lógica de colección sin imponer una estructura visual mediante un slot con alcance.
-
-**Instrucciones:**
-
-1. Abre `src/components/tasks/TaskCollectionProvider.vue`.
-
-2. Implementa el componente renderless:
+3. Reemplaza todo `src/App.vue` por este:
 
    ```vue
    <script setup>
-   import { useProjectHubContext } from '@/keys/projectHub'
-
-   const {
-     filters,
-     selection
-   } = useProjectHubContext()
+   import TareasOpciones from './TareasOpciones.vue'      // la versión de partida, en Options API
    </script>
 
    <template>
-     <slot
-       :tasks="filters.filteredTasks"
-       :total-tasks="filters.totalTasks"
-       :visible-tasks="filters.visibleTasks"
-       :completed-tasks="filters.completedTasks"
-       :search-term="filters.searchTerm"
-       :status-filter="filters.statusFilter"
-       :sort-by="filters.sortBy"
-       :clear-filters="filters.clearFilters"
-       :is-selected="selection.isSelected"
-       :select-task="selection.selectTask"
-       :clear-selection="selection.clearSelection"
-     />
+     <main class="columnas">
+       <TareasOpciones />
+     </main>
+   </template>
+
+   <!-- Estilos: cópialos tal cual, no son el tema de hoy -->
+   <style>
+   .columnas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; font-family: system-ui, sans-serif; }
+   section { border: 1px solid #888; border-radius: 8px; padding: 1rem; }
+   section ul { list-style: none; padding: 0; }
+   section li { padding: 0.5rem 0; }
+   .compacta li { padding: 0; }
+   </style>
+   ```
+
+   Desde ahora `src/components/HelloWorld.vue` y `src/style.css` ya no se usan; puedes borrarlos.
+
+**Primero, predice:** marca **Vista compacta** y recarga la página con `F5`. ¿Sigue marcada?
+
+**Qué debes ver:** "Cargando..." durante casi un segundo y luego 5 tareas. Tras recargar, la casilla sigue marcada y la lista sigue apretada. Ahora cuenta: la preferencia vive en dos secciones (`data` y `watch`) y la carga en otras dos (`data` y `mounted`). Para entender una tarea hay que leer el archivo entero.
+
+## Paso 2. Primeros composables: carga y buscador (7 minutos)
+
+**Qué vas a hacer y por qué:** mover la carga y el buscador a dos funciones `use...`, cada una con su estado, sus cálculos y sus efectos juntos. Así cada tarea se lee en un solo archivo y se reutiliza en otro componente.
+
+1. Crea la carpeta `src/composables` y dentro `useAsyncState.js`. Es el `Cargador` de las diapositivas, convertido en composable:
+
+   ```js
+   import { onMounted, ref } from 'vue'                    // un hook y la caja vigilada
+
+   export function useAsyncState(cargar, inicial) {        // recibe cómo cargar y el valor de arranque
+     const datos = ref(inicial)                            // lo que llegue del servidor
+     const cargando = ref(false)                           // bandera de espera
+     const error = ref('')                                 // mensaje si algo falla
+     async function recargar() {                           // pide los datos otra vez
+       cargando.value = true                               // empieza la espera
+       error.value = ''                                    // borra el error anterior
+       try { datos.value = await cargar() }                // intenta cargar y guarda lo que llegó
+       catch { error.value = 'No se pudieron cargar las tareas' } // si falla, deja el aviso
+       finally { cargando.value = false }                  // pase lo que pase, termina la espera
+     }
+     onMounted(recargar)                                   // hook: carga cuando el componente aparece
+     return { datos, cargando, error, recargar }           // lo que entrega a quien lo llame
+   }
+   ```
+
+2. Crea `src/composables/useProjectFilters.js`. `visibles` es un `computed`, como el filtro del laboratorio 1:
+
+   ```js
+   import { computed, ref } from 'vue'                     // dato calculado y caja vigilada
+
+   export function useProjectFilters(tareas) {             // recibe la lista vigilada (un ref)
+     const texto = ref('')                                 // lo que se escribe en el buscador
+     const soloPendientes = ref(false)                     // true: oculta las tareas hechas
+     const visibles = computed(() => {                     // se recalcula solo si cambia algo que usa
+       const buscado = texto.value.toLowerCase()           // minúsculas para comparar sin importar mayúsculas
+       return tareas.value
+         .filter((t) => t.titulo.toLowerCase().includes(buscado)) // deja las que contienen el texto
+         .filter((t) => !soloPendientes.value || !t.hecha)        // si el filtro está activo, quita las hechas
+         .sort((a, b) => a.titulo.localeCompare(b.titulo))        // ordena por título, de la A a la Z
+     })
+     const pendientes = computed(() => tareas.value.filter((t) => !t.hecha).length) // cuántas faltan
+     return { texto, soloPendientes, visibles, pendientes }  // estado y cálculos del buscador
+   }
+   ```
+
+3. Crea `src/ProjectHubView.vue`, la versión nueva. Cada composable se llama una vez y se toma solo lo que se usa:
+
+   ```vue
+   <script setup>
+   import { pedirTareas } from './datos.js'                // la carga simulada
+   import { useAsyncState } from './composables/useAsyncState.js'             // carga
+   import { useProjectFilters } from './composables/useProjectFilters.js'     // buscador
+
+   const { datos: tareas, cargando, error, recargar } = useAsyncState(pedirTareas, []) // datos: tareas la renombra
+   const { texto, soloPendientes, visibles, pendientes } = useProjectFilters(tareas)    // buscador
+   </script>
+
+   <template>
+     <section>
+       <h2>Después: Composition API</h2>
+       <input v-model="texto" aria-label="Buscar tarea" placeholder="Buscar..." />
+       <label><input type="checkbox" v-model="soloPendientes" /> Solo pendientes ({{ pendientes }})</label>
+       <p v-if="cargando">Cargando...</p>
+       <p v-else-if="error" role="alert">{{ error }}</p>
+       <ul v-else>
+         <li v-for="t in visibles" :key="t.id">{{ t.hecha ? '✔' : '○' }} {{ t.titulo }}</li>
+       </ul>
+       <button type="button" @click="recargar">Recargar</button>
+     </section>
    </template>
    ```
 
-3. El componente no contiene etiquetas visuales propias, estilos ni una lista `<ul>`. Su única salida es un `slot`.
-
-4. Los atributos en `kebab-case`, como `:visible-tasks`, se exponen al consumidor como `visibleTasks`. Vue normaliza los nombres de atributos de slots.
-
-5. Este patrón permite reutilizar la misma lógica con representaciones diferentes:
-   - Lista de tarjetas.
-   - Tabla accesible.
-   - Tablero Kanban.
-   - Lista virtualizada.
-   - Vista móvil compacta.
-
-6. Vuelve a `src/views/ProjectHubView.vue` y reemplaza el contenido del slot por una interfaz funcional:
-
-   ```vue
-   <TaskCollectionProvider v-else>
-     <template #default="collection">
-       <div class="project-hub__filters">
-         <label>
-           Buscar tarea
-           <input
-             :value="collection.searchTerm"
-             type="search"
-             placeholder="Buscar por título"
-             @input="collection.searchTerm = $event.target.value"
-           >
-         </label>
-
-         <label>
-           Estado
-           <select v-model="collection.statusFilter">
-             <option value="all">Todos</option>
-             <option value="pending">Pendientes</option>
-             <option value="in-progress">En progreso</option>
-             <option value="completed">Completadas</option>
-           </select>
-         </label>
-
-         <label>
-           Ordenar por
-           <select v-model="collection.sortBy">
-             <option value="updatedAt-desc">Actualización reciente</option>
-             <option value="title-asc">Título</option>
-             <option value="priority-desc">Prioridad</option>
-           </select>
-         </label>
-
-         <button type="button" @click="collection.clearFilters">
-           Limpiar filtros
-         </button>
-       </div>
-
-       <p aria-live="polite">
-         Mostrando {{ collection.visibleTasks }} de
-         {{ collection.totalTasks }} tareas.
-         Completadas: {{ collection.completedTasks }}.
-       </p>
-
-       <ul v-if="collection.tasks.length" class="task-list">
-         <li
-           v-for="task in collection.tasks"
-           :key="task.id"
-           :class="{ 'task-list__item--selected': collection.isSelected(task.id) }"
-         >
-           <button
-             type="button"
-             class="task-list__item"
-             @click="collection.selectTask(task)"
-           >
-             <strong>{{ task.title }}</strong>
-             <span>{{ task.status }}</span>
-             <span>Prioridad: {{ task.priority }}</span>
-           </button>
-         </li>
-       </ul>
-
-       <p v-else>
-         No hay tareas que coincidan con los filtros seleccionados.
-       </p>
-     </template>
-   </TaskCollectionProvider>
-   ```
-
-7. En una expresión asignable de plantilla, Vue desempaqueta automáticamente los `ref` expuestos por el slot. Por ello, `v-model="collection.statusFilter"` actualiza correctamente el `ref` recibido.
-
-**Resultado esperado:**
-
-La vista conserva la responsabilidad de presentación, mientras que `TaskCollectionProvider` concentra el contrato de datos y acciones de la colección.
-
-**Verificación:**
-
-Comprueba que el proveedor no renderiza una estructura visual propia:
-
-```bash
-grep -nE "<ul|<li|<button|<section|<div" src/components/tasks/TaskCollectionProvider.vue
-```
-
-El comando no debe producir resultados.
-
----
-
-### Paso 9. Retirar el módulo de estado anterior y comprobar la integración
-
-**Objetivo:** Finalizar la migración sin mantener dos fuentes de verdad para el mismo estado.
-
-**Instrucciones:**
-
-1. Ejecuta una búsqueda global de importaciones del módulo antiguo:
-
-   ```bash
-   grep -R "projectHubState" -n src --exclude=projectHubState.js
-   ```
-
-2. Si aparecen resultados, reemplaza cada importación por el consumo del contexto:
+4. En `src/App.vue`, debajo de la línea `import TareasOpciones ...`, agrega:
 
    ```js
-   import { useProjectHubContext } from '@/keys/projectHub'
-
-   const { tasks, filters, selection } = useProjectHubContext()
+   import ProjectHubView from './ProjectHubView.vue'      // la versión con composables
    ```
 
-3. Elimina el archivo de estado centralizado cuando no tenga consumidores:
+   Y debajo de `<TareasOpciones />`, agrega `<ProjectHubView />`.
 
-   ```bash
-   rm src/state/projectHubState.js
+**Primero, predice:** escribe "pr" en el buscador de la columna **Después**. ¿Se filtra también la columna **Antes**?
+
+**Qué debes ver:** dos columnas. En **Después** quedan "Conectar la API de proyectos" y "Escribir pruebas del buscador", ordenadas de la A a la Z; **Antes** no cambia, porque cada componente tiene su propio estado. **Solo pendientes (3)** oculta las hechas, y **Recargar** muestra "Cargando..." otra vez.
+
+**Opcional (1 minuto): ver la rama de error.** En `src/ProjectHubView.vue`, cambia `useAsyncState(pedirTareas, [])` por `useAsyncState(() => Promise.reject(new Error('sin red')), [])` y guarda. La columna **Después** muestra "No se pudieron cargar las tareas", porque `useAsyncState` atrapó el fallo en su `catch`. Vuelve a dejar `useAsyncState(pedirTareas, [])` y guarda.
+
+## Paso 3. Composables de selección y de preferencia (5 minutos)
+
+**Qué vas a hacer y por qué:** la selección recuerda qué tarea elegiste, y la preferencia guarda la vista compacta en el navegador con un `watch`, que es un efecto: algo que pasa afuera cuando un dato cambia.
+
+1. Crea `src/composables/useTaskSelection.js`:
+
+   ```js
+   import { computed, ref } from 'vue'                     // dato calculado y caja vigilada
+
+   export function useTaskSelection(tareas) {              // recibe la lista vigilada
+     const seleccionadaId = ref(null)                      // id de la tarea elegida; null es ninguna
+     const seleccionada = computed(() =>                   // la tarea completa, calculada desde el id
+       tareas.value.find((t) => t.id === seleccionadaId.value) ?? null) // ?? da null si no la encuentra
+     function seleccionar(id) {                            // única puerta para cambiar la selección
+       seleccionadaId.value = id                           // guarda el id elegido
+     }
+     return { seleccionada, seleccionar }                  // entrega la tarea y la acción
+   }
    ```
 
-   En Windows PowerShell:
+2. Crea `src/composables/useLocalPreferences.js`:
 
-   ```powershell
-   Remove-Item src/state/projectHubState.js
+   ```js
+   import { ref, watch } from 'vue'                        // caja vigilada y observador
+
+   export function useLocalPreferences(clave, inicial = false) { // clave con la que se guarda en el navegador
+     const guardado = localStorage.getItem(clave)          // lo que quedó de la visita anterior, o null
+     const valor = ref(guardado === null ? inicial : guardado === 'true') // el texto 'true' pasa a booleano
+     watch(valor, (nuevo) => localStorage.setItem(clave, String(nuevo)))  // efecto: guarda cada cambio
+     return valor                                          // entrega la caja: se usa con v-model
+   }
    ```
 
-4. Si el directorio `src/state` queda vacío, puedes eliminarlo:
+3. En `src/ProjectHubView.vue`, debajo del `import` de `useProjectFilters`, agrega:
 
-   ```bash
-   rmdir src/state
+   ```js
+   import { useTaskSelection } from './composables/useTaskSelection.js'       // selección
+   import { useLocalPreferences } from './composables/useLocalPreferences.js' // preferencia
    ```
 
-5. Ejecuta el linter y corrige errores de imports no utilizados, nombres incorrectos o problemas de formato:
+   Y debajo de la línea `const { texto, ... } = useProjectFilters(tareas)`, agrega:
 
-   ```bash
-   npm run lint
+   ```js
+   const { seleccionada, seleccionar } = useTaskSelection(tareas)                       // selección
+   const compacta = useLocalPreferences('vista-compacta')                               // preferencia guardada
    ```
 
-6. Genera la compilación de producción:
+4. En el mismo archivo, reemplaza todo el bloque `<template>` por este. Cambian la etiqueta `<section>`, la casilla nueva, cada tarea ahora es un botón y aparece la línea "Seleccionada":
+
+   ```vue
+   <template>
+     <section :class="{ compacta }">
+       <h2>Después: Composition API</h2>
+       <input v-model="texto" aria-label="Buscar tarea" placeholder="Buscar..." />
+       <label><input type="checkbox" v-model="soloPendientes" /> Solo pendientes ({{ pendientes }})</label>
+       <label><input type="checkbox" v-model="compacta" /> Vista compacta</label>
+       <p v-if="cargando">Cargando...</p>
+       <p v-else-if="error" role="alert">{{ error }}</p>
+       <ul v-else>
+         <li v-for="t in visibles" :key="t.id">
+           <button type="button" @click="seleccionar(t.id)">{{ t.hecha ? '✔' : '○' }} {{ t.titulo }}</button>
+         </li>
+       </ul>
+       <p>Seleccionada: {{ seleccionada?.titulo ?? 'ninguna' }}</p>
+       <button type="button" @click="recargar">Recargar</button>
+     </section>
+   </template>
+   ```
+
+**Primero, predice:** elige una tarea, marca **Vista compacta** en **Después** y recarga con `F5`. ¿Qué se conserva y qué se pierde?
+
+**Qué debes ver:** la vista compacta se conserva; la selección vuelve a "ninguna", porque solo la preferencia se guardó en el navegador. Cada columna usa su propia clave (`compacta` y `vista-compacta`), así que cada una recuerda lo suyo.
+
+## Paso 4. Contexto con provide y un renderless (6 minutos)
+
+**Qué vas a hacer y por qué:** un componente hijo no debería recibir por props todo lo que necesita a través de cada nivel. `ProjectHubView` ofrece sus datos con `provide` y una clave `Symbol`; el renderless los pide con un composable y se los entrega por el slot a quien decide cómo dibujarlos.
+
+1. Crea `src/keys.js`. Es el mismo patrón de `useSesion` de las diapositivas:
+
+   ```js
+   import { inject } from 'vue'                            // función para recibir lo que ofrece un componente de arriba
+
+   export const projectHubKey = Symbol('projectHub')       // clave única: ninguna otra puede chocar con ella
+
+   export function useProjectHubContext() {                // así piden el contexto los componentes de abajo
+     const contexto = inject(projectHubKey)                // busca hacia arriba quién lo ofreció con provide
+     if (!contexto) {                                      // si nadie lo ofreció...
+       throw new Error('useProjectHubContext debe utilizarse dentro de ProjectHubView') // ...error con nombre
+     }
+     return contexto                                       // datos y acciones de ProjectHub
+   }
+   ```
+
+2. Crea `src/TaskCollectionProvider.vue`, el renderless:
+
+   ```vue
+   <!-- Renderless: no dibuja nada propio; entrega la lista y sus acciones por el slot -->
+   <script setup>
+   import { useProjectHubContext } from './keys.js'        // composable que lee el contexto
+   const { visibles, cargando, error, seleccionar } = useProjectHubContext() // toma solo lo que va a entregar
+   </script>
+
+   <template>
+     <slot :lista="visibles" :cargando :error :seleccionar /> <!-- :cargando es la forma corta de :cargando="cargando" -->
+   </template>
+   ```
+
+3. Reemplaza todo `src/ProjectHubView.vue` por este. Cambian tres cosas: dos `import` nuevos (`provide` y `readonly` de `vue`; la clave y el renderless), el bloque `provide(...)` antes de `</script>`, y en la plantilla la lista, que ya no lee `visibles` directamente: la recibe del renderless con el nombre `lista`:
+
+   ```vue
+   <script setup>
+   import { provide, readonly } from 'vue'                 // ofrecer datos y protegerlos de escritura
+   import { pedirTareas } from './datos.js'                // la carga simulada
+   import { useAsyncState } from './composables/useAsyncState.js'             // carga
+   import { useProjectFilters } from './composables/useProjectFilters.js'     // buscador
+   import { useTaskSelection } from './composables/useTaskSelection.js'       // selección
+   import { useLocalPreferences } from './composables/useLocalPreferences.js' // preferencia
+   import { projectHubKey } from './keys.js'               // la clave única del contexto
+   import TaskCollectionProvider from './TaskCollectionProvider.vue'         // el renderless
+
+   const { datos: tareas, cargando, error, recargar } = useAsyncState(pedirTareas, []) // datos: tareas la renombra
+   const { texto, soloPendientes, visibles, pendientes } = useProjectFilters(tareas)    // buscador
+   const { seleccionada, seleccionar } = useTaskSelection(tareas)                       // selección
+   const compacta = useLocalPreferences('vista-compacta')                               // preferencia guardada
+
+   provide(projectHubKey, {                                // ofrece a todos los componentes de abajo...
+     visibles,                                             // ...la lista filtrada (un computed ya es de solo lectura)
+     cargando: readonly(cargando),                         // ...la bandera, solo para leer
+     error: readonly(error),                               // ...el mensaje, solo para leer
+     seleccionar                                           // ...y la acción para elegir una tarea
+   })
+   </script>
+
+   <template>
+     <section :class="{ compacta }">
+       <h2>Después: Composition API</h2>
+       <input v-model="texto" aria-label="Buscar tarea" placeholder="Buscar..." />
+       <label><input type="checkbox" v-model="soloPendientes" /> Solo pendientes ({{ pendientes }})</label>
+       <label><input type="checkbox" v-model="compacta" /> Vista compacta</label>
+       <!-- El renderless entrega los datos; este componente decide cómo se ven -->
+       <TaskCollectionProvider v-slot="{ lista, cargando, error, seleccionar }">
+         <p v-if="cargando">Cargando...</p>
+         <p v-else-if="error" role="alert">{{ error }}</p>
+         <ul v-else>
+           <li v-for="t in lista" :key="t.id">
+             <button type="button" @click="seleccionar(t.id)">{{ t.hecha ? '✔' : '○' }} {{ t.titulo }}</button>
+           </li>
+         </ul>
+       </TaskCollectionProvider>
+       <p>Seleccionada: {{ seleccionada?.titulo ?? 'ninguna' }}</p>
+       <button type="button" @click="recargar">Recargar</button>
+     </section>
+   </template>
+   ```
+
+   Dentro del `v-slot`, `cargando`, `error` y `seleccionar` son los que entrega el slot y tienen prioridad sobre las variables del mismo nombre del `<script setup>`. Aquí valen lo mismo, porque salen del mismo contexto.
+
+**Qué debes ver:** la columna **Después** funciona igual que en el paso 3. Ese es el punto de una refactorización: por fuera nada cambia; por dentro, `ProjectHubView` ya no sabe de dónde salen los datos de la lista ni cómo se cargan.
+
+## Paso 5. Comprobar el contexto y retirar la versión anterior (3 minutos)
+
+1. **Opcional, si te alcanza el tiempo (1 minuto). Predice:** si un componente pide el contexto fuera de `ProjectHubView`, ¿qué pasa? Pruébalo: en `src/App.vue`, agrega `import TaskCollectionProvider from './TaskCollectionProvider.vue'` y, debajo de `<ProjectHubView />`, agrega `<TaskCollectionProvider />`. Guarda.
+
+   **Qué debes ver:** la consola de Chrome (`F12`) muestra dos avisos amarillos, `[Vue warn]: injection "Symbol(projectHub)" not found` (Vue no encontró quién ofreciera esa clave) y `[Vue warn]: Unhandled error during execution of setup function`, y luego en rojo `Uncaught Error: useProjectHubContext debe utilizarse dentro de ProjectHubView`. La página queda en blanco, porque el error detiene el montaje de toda la aplicación. El error dice qué falta y dónde. Quita las dos líneas que agregaste, guarda y recarga con `F5`.
+
+2. Retira la versión anterior. Reemplaza todo `src/App.vue` por este y borra el archivo `src/TareasOpciones.vue`:
+
+   ```vue
+   <script setup>
+   import ProjectHubView from './ProjectHubView.vue'      // la versión con composables
+   </script>
+
+   <template>
+     <main class="columnas">
+       <ProjectHubView />
+     </main>
+   </template>
+
+   <!-- Estilos: cópialos tal cual, no son el tema de hoy -->
+   <style>
+   .columnas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; font-family: system-ui, sans-serif; }
+   section { border: 1px solid #888; border-radius: 8px; padding: 1rem; }
+   section ul { list-style: none; padding: 0; }
+   section li { padding: 0.5rem 0; }
+   .compacta li { padding: 0; }
+   </style>
+   ```
+
+3. En otra terminal, dentro de `lab02-composables`, prepara la versión final:
 
    ```bash
    npm run build
    ```
 
-**Resultado esperado:**
+**Qué debes ver:** la aplicación muestra solo la columna **Después**, y la terminal termina con `✓ built in` y sin errores.
 
-- No existe `src/state/projectHubState.js`.
-- No hay imports activos hacia el módulo eliminado.
-- La aplicación compila correctamente.
-- El estado se distribuye desde `ProjectHubView.vue` mediante contexto y composables.
+## Resultado esperado
 
-**Verificación:**
+- Cuatro composables en `src/composables`: filtros, selección, preferencias y carga. `useProjectHubContext`, en `src/keys.js`, también es un composable: vive junto a la clave que usa.
+- Contexto ofrecido con `provide` y la clave `Symbol` de `src/keys.js`, con error claro fuera del proveedor.
+- Un renderless, `TaskCollectionProvider`, que entrega la lista de tareas por un slot.
+- `npm run build` termina sin errores.
 
-Ejecuta:
+Cada archivo final aparece completo en su paso: los composables en los pasos 2 y 3, `keys.js` y `TaskCollectionProvider.vue` en el paso 4, `ProjectHubView.vue` en el paso 4, y `App.vue` en el paso 5.
 
-```bash
-test ! -f src/state/projectHubState.js && echo "Estado centralizado eliminado"
-npm run build
-```
+## Problemas frecuentes
 
-La compilación debe terminar sin errores.
-
----
-
-## Validación y pruebas
-
-### Validación manual de la aplicación
-
-Inicia el servidor Vite con el puerto y host obligatorios:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-Abre:
-
-```text
-http://127.0.0.1:5173
-```
-
-Realiza las siguientes comprobaciones:
-
-| Prueba | Acción | Resultado esperado |
+| Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
-| Carga inicial | Abre la vista ProjectHub | Se muestran las tareas interceptadas por MSW o por el servicio simulado existente. |
-| Estado de carga | Recarga la página con DevTools abierto | Se muestra temporalmente “Cargando tareas…”. |
-| Búsqueda | Escribe una palabra incluida en un título | La lista se reduce sin recargar la página. |
-| Filtro por estado | Selecciona “Completadas” | Solo aparecen tareas con `status: "completed"`. |
-| Ordenamiento | Selecciona “Prioridad” | Las tareas se reordenan de mayor a menor prioridad. |
-| Restablecimiento | Pulsa “Limpiar filtros” | Se restablecen búsqueda, estado y ordenamiento. |
-| Selección | Pulsa una tarea | La tarea obtiene la clase visual de selección y la URL contiene `?task=<id>`. |
-| Preferencias | Pulsa “Cambiar densidad” | La clase `project-hub--compact` cambia y la preferencia se guarda en Local Storage. |
-| Persistencia | Recarga la página después de cambiar densidad | La preferencia visual se conserva. |
-| Error de carga | Simula temporalmente un error en MSW | Se muestra un mensaje con `role="alert"`. |
-
-### Validación estática
-
-Ejecuta:
-
-```bash
-npm run lint
-npm run build
-```
-
-Ambos comandos deben finalizar correctamente.
-
-### Validación de arquitectura
-
-Ejecuta las siguientes comprobaciones:
-
-```bash
-grep -R "projectHubState" -n src || true
-grep -R "provide(projectHubKey" -n src/views
-grep -R "useProjectHubContext" -n src/components
-```
-
-Criterios esperados:
-
-- No existen referencias al módulo de estado eliminado.
-- `ProjectHubView.vue` provee el contexto mediante `provide(projectHubKey, ...)`.
-- `TaskCollectionProvider.vue` consume el contexto mediante `useProjectHubContext()`.
-
-### Checklist de entrega
-
-- [ ] Existen los cuatro composables solicitados en `src/composables`.
-- [ ] `useProjectFilters()` usa `computed()` para tareas filtradas y contadores.
-- [ ] `useTaskSelection()` no importa Vue Router directamente.
-- [ ] `useLocalPreferences()` persiste preferencias y usa `onScopeDispose()`.
-- [ ] `useAsyncState()` cancela operaciones pendientes con `AbortController`.
-- [ ] Existe `src/keys/projectHub.js` con símbolos de inyección.
-- [ ] `ProjectHubView.vue` provee contexto de proyecto y sesión simulada.
-- [ ] `TaskCollectionProvider.vue` es renderless y usa un slot con alcance.
-- [ ] Se eliminó `src/state/projectHubState.js`.
-- [ ] `npm run lint` y `npm run build` finalizan correctamente.
-
-## Resolución de problemas
-
-### Problema 1. Error: `useProjectHubContext debe utilizarse dentro de ProjectHubView`
-
-**Síntoma:** La consola del navegador muestra el error personalizado al cargar `TaskCollectionProvider` o un componente hijo.
-
-**Causa:** El componente que llama a `useProjectHubContext()` no está debajo de la instancia de `ProjectHubView.vue` que ejecuta `provide(projectHubKey, projectHubContext)`. También puede ocurrir si se usa accidentalmente otra clave `Symbol()` creada en un archivo diferente.
-
-**Solución:**
-
-1. Confirma que `TaskCollectionProvider` está anidado dentro de `ProjectHubView.vue`.
-2. Confirma que proveedor y consumidor importan exactamente la misma clave:
-
-   ```js
-   import { projectHubKey, useProjectHubContext } from '@/keys/projectHub'
-   ```
-
-3. No declares un nuevo `Symbol('projectHub')` en el componente consumidor.
-4. Verifica que `provide(projectHubKey, projectHubContext)` se ejecuta de forma síncrona dentro de `<script setup>` y no después de un `await`.
-
-### Problema 2. La preferencia cambia, pero desaparece al recargar la página
-
-**Síntoma:** El modo compacto o el tema cambia durante la sesión actual, pero vuelve al valor inicial después de recargar.
-
-**Causa:** El navegador puede tener Local Storage deshabilitado, la aplicación puede estar usando una clave diferente a `projecthub:preferences`, o se está mutando una copia no reactiva de las preferencias.
-
-**Solución:**
-
-1. Abre Chrome DevTools > **Application** > **Local Storage** y verifica si existe la clave `projecthub:preferences`.
-2. Comprueba que la llamada usa el mismo nombre de clave:
-
-   ```js
-   const preferences = useLocalPreferences('projecthub:preferences')
-   ```
-
-3. Actualiza las preferencias mediante las acciones del composable:
-
-   ```js
-   preferences.toggleCompactMode()
-   preferences.setTheme('dark')
-   ```
-
-4. No desestructures `preferences.value` en variables normales, ya que perderían el vínculo reactivo.
-5. Si el navegador bloquea el almacenamiento, usa una ventana normal en lugar de una sesión con políticas restrictivas o revisa la configuración de privacidad.
+| El creador pregunta `Select a framework` | Se usó `npm create vite ... -- --template vue`: PowerShell se come el `--` y la plantilla no llega | Pulsa `Ctrl + C`, borra la carpeta si se creó y usa `npx --yes create-vite@6.4 lab02-composables --template vue` |
+| La terminal muestra `Local: http://localhost:5173/` y no 5172 | Se usó `npm run dev -- --port 5172` en PowerShell, que se come el `--` | Detén el servidor con `Ctrl + C` y usa `npx vite --port 5172` |
+| `Port 5172 is in use, trying another one...` | Otro servidor quedó abierto en ese puerto | Usa la dirección que muestra la terminal, o cierra el otro servidor con `Ctrl + C` |
+| `Failed to resolve import "./composables/..."` | El archivo no está en `src/composables` o el nombre no coincide | Revisa la carpeta y el nombre exacto, con mayúsculas |
+| `Error: useProjectHubContext debe utilizarse dentro de ProjectHubView` | Un componente pide el contexto fuera de su proveedor | Ponlo dentro de la plantilla de `ProjectHubView` |
+| La vista compacta no se recuerda al recargar | Falta el `watch` en `useLocalPreferences` o la casilla no usa `v-model="compacta"` | Revisa el paso 3 |
+| Al guardar un archivo, la lista vuelve a "Cargando..." y se pierde la selección | La recarga en caliente de Vite vuelve a crear el componente | Es normal; `datos.js` entrega copias, así que los datos no se duplican |
 
 ## Limpieza
 
-1. Detén el servidor de desarrollo con:
+En la terminal del servidor, pulsa `Ctrl + C` para detenerlo.
 
-   ```text
-   Ctrl + C
-   ```
+## Ejercicios de reserva
 
-2. Comprueba los cambios realizados:
+**Básico (renderless).** Debajo de la lista, usa otra vez `TaskCollectionProvider` para mostrar solo "N tareas visibles".
 
-   ```bash
-   git status
-   ```
+<details><summary>Solución</summary>
 
-3. Añade los archivos modificados al área de preparación:
+Dentro de `<section>` en `src/ProjectHubView.vue`:
 
-   ```bash
-   git add src
-   ```
+```vue
+<TaskCollectionProvider v-slot="{ lista }">     <!-- pide solo la lista -->
+  <p>{{ lista.length }} tareas visibles</p>     <!-- su propio diseño -->
+</TaskCollectionProvider>
+```
 
-4. Crea un commit en la rama `main`:
+</details>
 
-   ```bash
-   git commit -m "refactor project hub to composition composables"
-   ```
+**Medio (plugin).** Crea un plugin `formatoFecha` que ofrezca a toda la aplicación una función para escribir fechas en español de Colombia, instálalo con `app.use` y muestra "Hoy: ..." en `ProjectHubView`.
 
-5. Confirma el historial reciente:
+<details><summary>Solución</summary>
 
-   ```bash
-   git log --oneline -3
-   ```
+`src/formatoFecha.js`:
 
-No elimines `node_modules`, la configuración de MSW ni los artefactos necesarios del proyecto. El siguiente laboratorio utilizará esta arquitectura para incorporar rutas, autenticación simulada y guards.
+```js
+export const fechaKey = Symbol('fecha')                 // clave única del plugin
+export const formatoFecha = {                           // un plugin es un objeto con install()
+  install(app) {                                        // Vue lo llama una vez, con app.use
+    const formato = new Intl.DateTimeFormat('es-CO', { dateStyle: 'long' }) // "16 de octubre de 2026"
+    app.provide(fechaKey, (fecha) => formato.format(fecha)) // ofrece la función a toda la aplicación
+  }
+}
+```
 
-## Resumen
+En `src/main.js`: `import { formatoFecha } from './formatoFecha.js'` y `createApp(App).use(formatoFecha).mount('#app')`. En `ProjectHubView.vue`: agrega `inject` al `import` de `vue`, `import { fechaKey } from './formatoFecha.js'`, `const formatear = inject(fechaKey)` y en la plantilla `<p>Hoy: {{ formatear(new Date()) }}</p>`.
 
-En este laboratorio refactorizaste ProjectHub desde un módulo de estado concentrado hacia una arquitectura de composición reutilizable. `useProjectFilters()` concentra el estado derivado de búsqueda y ordenamiento; `useTaskSelection()` gestiona selección con navegación desacoplada; `useLocalPreferences()` controla persistencia visual; y `useAsyncState()` estandariza los ciclos de carga y error.
+</details>
 
-Además, `ProjectHubView.vue` actúa ahora como proveedor de contexto, mientras `TaskCollectionProvider.vue` aplica un patrón renderless para separar lógica de colección y presentación. Esta estructura reduce prop drilling, evita duplicar estado derivado y deja preparada la aplicación para introducir autenticación, navegación protegida y guards en el laboratorio `03-00-01`.
+**Avanzado (HOC, componente de orden superior).** Crea `conPermiso(Componente, permitido)`, que devuelve un componente que muestra el original solo si `permitido` es `true`, y úsalo en `App.vue` con `ProjectHubView`.
 
-### Recursos opcionales
+<details><summary>Solución</summary>
 
-- [Vue: Composition API](https://vuejs.org/guide/extras/composition-api-faq.html)
-- [Vue: Provide / Inject](https://vuejs.org/guide/components/provide-inject.html)
-- [Vue: Slots con alcance](https://vuejs.org/guide/components/slots.html#scoped-slots)
-- [Vue: Reactividad y observadores](https://vuejs.org/guide/essentials/watchers.html)
+`src/conPermiso.js`:
+
+```js
+import { defineComponent, h } from 'vue'                // crear un componente en JavaScript y describir qué dibujar
+export function conPermiso(Componente, permitido) {     // recibe un componente y una condición
+  return defineComponent({                              // devuelve un componente nuevo
+    setup(_, { attrs, slots }) {                        // lo que le pasen al envoltorio
+      return () => permitido                            // función que dibuja
+        ? h(Componente, attrs, slots)                   // sí: el original, intacto
+        : h('p', 'Sin permiso para ver ProjectHub')     // no: un aviso
+    }
+  })
+}
+```
+
+En `App.vue`: `import { conPermiso } from './conPermiso.js'`, `const ProjectHubSeguro = conPermiso(ProjectHubView, false)` y `<ProjectHubSeguro />` en lugar de `<ProjectHubView />`. Con `false` ves el aviso; con `true`, la lista.
+
+</details>
+
+## Recursos
+
+- [Por qué existe la Composition API](https://vuejs.org/guide/extras/composition-api-faq)
+- [Composables: cómo escribirlos y nombrarlos](https://vuejs.org/guide/reusability/composables)
+- [provide e inject](https://vuejs.org/guide/components/provide-inject)
+- [Slots con datos, la base de los renderless](https://vuejs.org/guide/components/slots#scoped-slots)
+- [Plugins](https://vuejs.org/guide/reusability/plugins)
+
+## Control de cambios
+
+| Versión | Fecha | Autor | Cambio |
+|---|---|---|---|
+| 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita: el proyecto se crea desde una carpeta vacía con Vite 6.4 y todo el código está en la guía; parte de una versión en Options API; predicción y resultado visible en cada paso; ejercicios de reserva con solución; `npm run build` como prueba final |
+| 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI en Windows 11 (PowerShell) y Linux: el proyecto se crea con `npx --yes create-vite@6.4` y el servidor arranca con `npx vite --port 5172`, porque PowerShell se come el `--` de `npm create ... -- --template` y de `npm run dev -- --port`; Node 20 o 22; aviso de borrar `HelloWorld.vue` al final del paso 1; paso opcional de la rama de error; paso 4 con el archivo completo; aclaración del slot; paso 5.1 opcional con los avisos reales de la consola; problemas frecuentes con las dos fallas reales |
