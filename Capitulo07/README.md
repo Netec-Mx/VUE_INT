@@ -1,1691 +1,711 @@
-# 4 Practica: crear una estrategia de pruebas para una aplicación Vue
-
-## Metadatos
+<!-- lang: es-CO -->
+# Práctica 7.4: crear una estrategia de pruebas para una aplicación Vue
 
 | Campo | Valor |
 |---|---|
 | Duración | 46 minutos |
-| Complejidad | Difícil |
+| Complejidad | Media |
 | Nivel de Bloom | Crear |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio transformarás la aplicación optimizada **Catalogo Pro** en una aplicación verificable mediante una estrategia de calidad automatizada. Diseñarás una pirámide de pruebas, configurarás Vitest con `jsdom`, crearás pruebas unitarias y de componentes, y automatizarás flujos críticos con Cypress.
+Vas a probar **Catálogo Pro**, un catálogo pequeño con buscador y favoritos, en los tres niveles de la pirámide: unitarias con Vitest, de componentes con Vue Test Utils y de extremo a extremo (E2E, *end to end*) con Cypress. Antes de escribir una sola prueba vas a dejar por escrito qué se prueba, en qué nivel y qué **no** se prueba. Construyes todo desde una carpeta vacía: no se clona ni se descarga material del curso; solo se instalan paquetes npm.
 
-El resultado será una base de pruebas determinista y mantenible preparada para ser ejecutada posteriormente en un pipeline de CI/CD.
+**Objetivo:** documentar una estrategia de pruebas basada en riesgos, niveles de prueba y criterios de exclusión, y comprobarla con pruebas automáticas.
 
-## Objetivos de aprendizaje
+**Resultado final, en la terminal:**
 
-Al finalizar el laboratorio, podrás:
-
-- [ ] Documentar una estrategia de pruebas basada en riesgos, niveles de prueba y criterios de exclusión.
-- [ ] Configurar Vitest, `jsdom`, Vue Test Utils y cobertura V8 en una SPA Vue 3.
-- [ ] Probar composables, utilidades y cálculos de virtualización de forma aislada.
-- [ ] Validar contratos públicos de componentes mediante propiedades, eventos y estados visibles.
-- [ ] Automatizar con Cypress los flujos de catálogo, filtros, navegación lazy-loaded y favoritos.
-
-## Requisitos previos
-
-### Conocimientos
-
-Debes conocer o haber practicado previamente:
-
-- Sintaxis básica de Vue 3 con Composition API.
-- Uso de `ref`, `computed`, `watch` y propiedades reactivas.
-- Navegación con Vue Router y rutas con carga perezosa.
-- Principios básicos de aserciones, mocks, stubs y pruebas asíncronas.
-- Uso de Git y la rama única `main`.
-
-### Acceso y proyecto base
-
-Debes contar con:
-
-- El laboratorio `06-00-01` finalizado.
-- La aplicación optimizada con lista virtualizada, rutas lazy-loaded y reporte de rendimiento.
-- Acceso de lectura y escritura al directorio obligatorio:
-
-```bash
-../projecthub-spa
+```text
+npm run test:run       ->  Test Files  3 passed (3)   Tests 10 passed (10)
+npm run test:coverage  ->  tabla de cobertura sin "ERROR: Coverage ... does not meet"
+npm run e2e            ->  All specs passed!   3 pruebas aprobadas en Chrome
 ```
 
-En Windows, utiliza el equivalente:
+## Objetivos
 
-```powershell
-C:\workspace\vue-intermedio-labs\projecthub-spa
-```
+Al terminar podrás:
 
-- Node.js `22.14.0`.
-- npm `10.9.2` o pnpm `9.15.4`.
-- Google Chrome instalado para ejecutar Cypress.
-- Docker no es necesario en este laboratorio.
+- Escribir `docs/test-strategy.md` con pirámide, riesgos priorizados y pruebas excluidas.
+- Configurar Vitest con jsdom y cobertura V8 en un proyecto de Vite.
+- Probar una función pura con tres casos: normal, borde y error.
+- Probar un componente por lo que muestra y lo que avisa, con un doble del servicio de datos.
+- Automatizar tres recorridos en Chrome con Cypress, datos fijos y sin esperas por tiempo.
 
-> **Importante:** no inicies servicios en el puerto `3000`. Los datos se interceptarán en el navegador mediante MSW durante desarrollo y mediante `cy.intercept()` durante las pruebas E2E.
+## Conceptos que usas
 
-## Entorno del laboratorio
-
-### Recursos de hardware
-
-| Recurso | Mínimo | Recomendado |
-|---|---:|---:|
-| CPU | 2 núcleos a 2.0 GHz | 4 núcleos |
-| RAM | 8 GB | 16 GB |
-| Disco libre | 5 GB | 10 GB |
-| Resolución | 1366x768 | 1920x1080 |
-
-### Software principal
-
-| Herramienta | Versión de referencia |
+| Concepto | Dónde lo viste |
 |---|---|
-| Node.js | 22.14.0 |
-| Vue | 3.5.13 |
-| Vite | 6.1.0 |
-| Vitest | 3.0.5 |
-| jsdom | 26.0.0 |
-| Vue Test Utils | 2.4.6 |
-| Cypress | 14.1.0 |
-| Google Chrome | 133.0.6943.98 o superior |
+| `ref`, `computed`, `inject`, `onMounted`, props y `emit` | Capítulos 1 a 3 |
+| `fetch` con `async`/`await` y manejo de errores | Capítulo 5 |
+| `computed` como memoización: guarda el resultado y lo reutiliza | Capítulo 6 (repaso de hoy) |
+| Preparar, ejecutar y verificar; `describe`, `it`, `expect`, jsdom; dobles con `vi.fn()`, `mockResolvedValue` (promesa que se cumple), `mockRejectedValue` (promesa que falla) y `toHaveBeenCalledOnce` (se llamó una sola vez) | Tema 7.1 |
+| `mount`, `get`, `trigger`, `setValue`, `emitted`, `flushPromises`, `global.provide`; `enableAutoUnmount`, que desmonta solo los componentes al final de cada prueba | Tema 7.2 |
+| `cy.intercept`, fixtures, `data-cy`, `cy.wait('@alias')`, pirámide de pruebas | Tema 7.3 |
 
-### Preparación inicial
+**Repaso del capítulo 6:** en el paso 5 el catálogo filtra con un `computed`. Es la misma memoización que usaste para no recalcular de más; hoy además sacas la lógica a una función pura para poder probarla sola.
 
-1. Abre una terminal y entra al proyecto.
+## Antes de empezar
 
-```bash
-cd ../projecthub-spa
-```
+- **Node.js 20 o 22 en adelante** (`node -v`; probado con 22.3.0 y 24.18.0) y npm (`npm -v`).
+- **Google Chrome**, porque Cypress lo usará en el paso 7.
+- Visual Studio Code con la extensión **Vue (Official)**.
+- Unos 700 MB libres: Cypress descarga su programa la primera vez.
 
-2. Confirma que trabajas en la única rama permitida.
+## Preparación (5 minutos)
 
-```bash
-git branch --show-current
-```
+1. Abre una terminal en la carpeta donde guardas tus prácticas y crea el proyecto con la plantilla oficial de Vite, versión fijada. `npx --yes create-vite` no necesita el `--` que PowerShell se come, así que el comando es igual en Windows, macOS y Linux:
 
-3. El resultado esperado es:
+   ```bash
+   npx --yes create-vite@6.4.1 lab07-pruebas --template vue
+   cd lab07-pruebas
+   npm install
+   ```
+
+2. Instala las herramientas de prueba con versiones exactas (`-D`: solo para desarrollo; `-E`: versión exacta). Cypress descarga su programa y tarda entre uno y tres minutos: **mientras termina, haz el punto 3 y luego el paso 1**, que no usan la terminal.
+
+   ```bash
+   npm install -D -E vitest@3.2.4 @vitest/coverage-v8@3.2.4 jsdom@26.1.0 @vue/test-utils@2.4.6 cypress@14.5.4 start-server-and-test@2.0.12
+   npx cypress install
+   ```
+
+   `npx cypress install` asegura el programa de Cypress: algunas versiones de npm ya no ejecutan solas la descarga al instalar el paquete. Si ya estaba, responde `Cypress 14.5.4 is installed`.
+
+3. Abre la carpeta en VS Code (`code .`). En `package.json`, reemplaza el bloque `"scripts"` completo por este:
+
+   ```json
+   "scripts": {
+     "dev": "vite",
+     "build": "vite build",
+     "preview": "vite preview --host 127.0.0.1 --port 4177 --strictPort",
+     "test": "vitest",
+     "test:run": "vitest run",
+     "test:coverage": "vitest run --coverage",
+     "cy:run": "cypress run --browser chrome",
+     "e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4177 cy:run"
+   },
+   ```
+
+   | Script | Para qué |
+   |---|---|
+   | `test` | Vitest en modo vigilancia: repite las pruebas cada vez que guardas |
+   | `test:run` / `test:coverage` | Una sola pasada; la segunda mide la cobertura |
+   | `preview` | Sirve la aplicación compilada en el puerto 4177, propio de este laboratorio para no chocar con otro `preview` abierto |
+   | `e2e` | Compila, arranca `preview`, corre Cypress en Chrome y apaga el servidor |
+   | `start-server-and-test` | Lo usa `e2e`: arranca `preview`, espera a que responda la URL y luego corre Cypress; al terminar, apaga el servidor |
+
+**Qué debes ver:** la instalación termina con `added ... packages` y sin `ERR!`.
+
+## Paso 1. Escribir la estrategia antes que las pruebas (3 minutos)
+
+**Qué vas a hacer y por qué:** una estrategia decide tres cosas: qué riesgos importan, en qué piso de la pirámide se prueba cada uno y qué no se prueba. Escribirlo primero evita probar "todo" y no cubrir lo importante.
+
+**Dónde:** crea la carpeta `docs` en la raíz del proyecto, al lado de `package.json`, y dentro el archivo `docs/test-strategy.md`.
+
+   ```md
+   # Estrategia de pruebas de Catálogo Pro
+
+   ## Pirámide de pruebas
+
+   | Nivel | Proporción | Qué cubre | Herramienta |
+   |---|---:|---|---|
+   | Unitarias | 60 % | Funciones puras, como filtrarProductos | Vitest |
+   | Componentes | 30 % | Lo que un componente muestra y avisa | Vue Test Utils y jsdom |
+   | E2E | 10 % | Recorridos que no pueden fallar | Cypress en Chrome |
+
+   ## Riesgos priorizados
+
+   | Riesgo | Impacto | Dónde se prueba |
+   |---|---|---|
+   | El filtro muestra productos equivocados | Alto | Unitaria y E2E |
+   | La estrella no marca o no desmarca el favorito | Alto | Componente y E2E |
+   | El servidor falla y la pantalla queda en blanco | Alto | Componente y E2E |
+
+   ## Pruebas excluidas
+
+   - Comparar píxeles: se rompe con cada cambio de estilo.
+   - Medir rendimiento dentro de jsdom: jsdom no dibuja de verdad.
+   - Cada combinación de filtros en E2E: es lento y ya lo cubren las unitarias.
+   - El servidor real: las E2E responden con datos fijos.
+
+   ## Criterios de calidad
+
+   - npm run test:run y npm run e2e en verde antes de entregar un cambio.
+   - Cobertura mínima: 80 % de líneas, funciones y sentencias; 75 % de ramas.
+   - Ninguna E2E espera un número fijo de milisegundos.
+   - Todo error corregido llega con una prueba que lo habría detectado.
+   ```
+
+**Hazlo tuyo (opcional, si te sobra tiempo al final):** agrega una fila a "Riesgos priorizados" y una línea a "Pruebas excluidas" pensando en un proyecto de tu trabajo.
+
+**Qué debes ver:** el archivo con cuatro secciones: pirámide, riesgos, excluidas y criterios. Los pasos siguientes cumplen cada fila.
+
+## Paso 2. Configurar Vitest y probar una función pura (7 minutos)
+
+**Qué vas a hacer y por qué:** la lógica del filtro va en una función pura, sin Vue ni red. Es la base de la pirámide: la prueba más rápida y la que más se escribe.
+
+1. Reemplaza todo `vite.config.js` por este:
+
+   ```js
+   import { defineConfig } from 'vitest/config'   // igual al de Vite, pero entiende la clave test
+   import vue from '@vitejs/plugin-vue'           // traduce los archivos .vue
+
+   export default defineConfig({
+     plugins: [vue()],                            // también compila los .vue dentro de las pruebas
+     test: {                                      // todo lo de Vitest va aquí
+       environment: 'jsdom',                      // navegador de mentira: crea window y document
+       include: ['src/**/*.test.js'],             // qué archivos son pruebas
+       setupFiles: ['./vitest.setup.js'],         // preparación que corre antes de cada archivo de pruebas
+       coverage: {                                // cobertura: qué líneas ejecutaron las pruebas
+         provider: 'v8',                          // la mide el motor V8 de Node.js
+         reporter: ['text', 'html'],              // tabla en la terminal y página en coverage/index.html
+         include: ['src/**/*.{js,vue}'],          // el código de la aplicación
+         exclude: ['src/main.js', 'src/api.js', 'src/**/*.test.js'], // arranque y red: los cubre la E2E
+         thresholds: { lines: 80, functions: 80, statements: 80, branches: 75 } // mínimos de la estrategia
+       }
+     }
+   })
+   ```
+
+2. Crea en la raíz del proyecto `vitest.setup.js`:
+
+   ```js
+   import { afterEach } from 'vitest'                    // gancho que corre al final de cada prueba
+   import { enableAutoUnmount } from '@vue/test-utils'  // desmontador automático de componentes
+
+   enableAutoUnmount(afterEach)                          // tras cada prueba, quita lo que quedó montado
+   ```
+
+3. Crea `src/utils/filtrarProductos.js`:
+
+   ```js
+   // Función pura: con los mismos datos devuelve siempre el mismo resultado y no toca nada más.
+   export function filtrarProductos(productos, texto) {
+     if (!Array.isArray(productos)) {                        // ¿llegó algo que no es una lista?
+       throw new TypeError('productos debe ser una lista')  // falla pronto y con un mensaje claro
+     }
+     const buscado = texto.trim().toLowerCase()              // quita espacios y pasa a minúsculas
+     if (!buscado) return productos                          // sin texto: todos los productos
+     return productos.filter((p) => p.nombre.toLowerCase().includes(buscado)) // solo los que lo contienen
+   }
+   ```
+
+4. Crea la prueba junto a la función, en `src/utils/filtrarProductos.test.js`:
+
+   ```js
+   import { describe, it, expect } from 'vitest'               // agrupar, declarar un caso y comprobar
+   import { filtrarProductos } from './filtrarProductos.js'   // la función que se prueba
+
+   const productos = [                                         // datos fijos: siempre los mismos
+     { id: 1, nombre: 'Mouse inalámbrico' },
+     { id: 2, nombre: 'Teclado mecánico' },
+     { id: 3, nombre: 'Monitor 4K' }
+   ]
+
+   describe('filtrarProductos', () => {
+     it('devuelve los que contienen el texto, sin importar mayúsculas', () => { // caso normal
+       const resultado = filtrarProductos(productos, 'MO')    // ejecutar: una sola acción
+       expect(resultado.map((p) => p.id)).toEqual([1, 3])     // verificar: Mouse y Monitor
+     })
+
+     it('con texto vacío o solo espacios devuelve todos', () => { // caso borde
+       expect(filtrarProductos(productos, '   ')).toHaveLength(3) // los tres productos
+     })
+
+     it('lanza un error claro si no recibe una lista', () => {  // caso de error
+       expect(() => filtrarProductos(null, 'mo')).toThrow('productos debe ser una lista') // el mensaje exacto
+     })
+   })
+   ```
+
+5. **Predice:** ¿cuántas de las tres pruebas pasarán? Ejecuta:
+
+   ```bash
+   npm run test:run
+   ```
+
+**Qué debes ver:**
 
 ```text
-main
+ ✓ src/utils/filtrarProductos.test.js (3 tests)
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
 ```
 
-4. Verifica las versiones instaladas.
-
-```bash
-node --version
-npm --version
-```
-
-5. Instala las dependencias actuales del proyecto.
-
-```bash
-npm install
-```
-
-6. Crea un punto de control inicial.
-
-```bash
-git status
-git add .
-git commit -m "chore: checkpoint before test strategy"
-```
-
-> Si no hay cambios pendientes, Git indicará que no hay nada que confirmar. Continúa sin crear un commit vacío.
-
----
-
-## Desarrollo paso a paso
-
-### Paso 1. Inspeccionar la arquitectura y definir contratos verificables
-
-**Objetivo:** identificar las unidades críticas de Catalogo Pro y establecer nombres coherentes para archivos, rutas y selectores de prueba.
-
-**Instrucciones:**
-
-1. Inspecciona la estructura principal del código fuente.
-
-```bash
-find src -maxdepth 3 -type f | sort
-```
-
-2. Localiza o confirma la existencia de estos elementos creados o refactorizados en el laboratorio anterior:
-
-```text
-src/components/ProductRow.vue
-src/components/ProductFilters.vue
-src/components/ProductListVirtualized.vue
-src/composables/useProductFilters.ts
-src/utils/productCache.ts
-src/utils/visibleRange.ts
-src/views/CatalogView.vue
-src/views/ProductDetailView.vue
-src/router/index.ts
-```
-
-3. Si los nombres en tu proyecto son diferentes, mantén la implementación existente y adapta únicamente los imports de las pruebas. Para el resto del laboratorio se utilizarán los siguientes contratos:
-
-| Unidad | Contrato que se probará |
-|---|---|
-| `useProductFilters` | Filtra por texto, categoría y favoritos; permite reiniciar filtros. |
-| `productCache` | Guarda resultados por clave y respeta tiempo de vida (`TTL`). |
-| `visibleRange` | Calcula los índices visibles de una lista virtualizada. |
-| `ProductRow` | Muestra un producto y emite el evento de favorito. |
-| `ProductFilters` | Recibe filtros y emite cambios observables. |
-| `ProductListVirtualized` | Renderiza únicamente el rango visible y conserva filas con props estables. |
-| Catálogo E2E | Carga datos, filtra, abre detalle, conserva filtros y administra favoritos. |
-
-4. Verifica que las rutas lazy-loaded utilicen importaciones dinámicas en `src/router/index.ts`.
-
-```ts
-{
-  path: '/products/:id',
-  name: 'product-detail',
-  component: () => import('../views/ProductDetailView.vue'),
-}
-```
-
-5. Asegúrate de que el listado preserve filtros en la URL, por ejemplo mediante parámetros de consulta:
-
-```text
-/products?search=mouse&category=peripherals
-```
-
-**Resultado esperado:**
-
-La aplicación tiene una estructura identificable y las funcionalidades críticas están disponibles para ser probadas de forma aislada y de extremo a extremo.
-
-**Verificación:**
-
-Ejecuta la aplicación de desarrollo en el puerto obligatorio:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-Abre:
-
-```text
-http://127.0.0.1:5173
-```
-
-Confirma manualmente que el catálogo, los filtros, los favoritos y el detalle del producto continúan funcionando.
-
-Detén el servidor con `Ctrl+C` antes de continuar.
-
----
-
-### Paso 2. Crear la estrategia de pruebas basada en riesgos
-
-**Objetivo:** documentar qué se prueba, en qué nivel se prueba, qué riesgos se priorizan y qué escenarios se excluyen por costo o fragilidad.
-
-**Instrucciones:**
-
-1. Crea el directorio de documentación.
-
-```bash
-mkdir -p docs
-```
-
-2. Crea el archivo `docs/test-strategy.md`.
-
-```bash
-touch docs/test-strategy.md
-```
-
-3. Agrega el siguiente contenido.
-
-```md
-# Estrategia de pruebas de Catalogo Pro
-
-## Propósito
-
-Garantizar que los flujos críticos del catálogo funcionen de forma confiable, con retroalimentación rápida para la lógica de negocio y validación realista de los recorridos principales en navegador.
-
-## Pirámide de pruebas
-
-| Nivel | Proporción objetivo | Responsabilidad |
-|---|---:|---|
-| Unitarias | 60 % | Lógica de filtros, caché, cálculos de virtualización y composables. |
-| Componentes | 30 % | Contratos de props, eventos, estados vacíos y renderizado visible. |
-| E2E | 10 % | Flujos críticos completos en Chrome mediante Cypress. |
-
-## Riesgos priorizados
-
-| Riesgo | Impacto | Nivel principal | Motivo |
-|---|---|---|---|
-| Filtros muestran productos incorrectos | Alto | Unitario y E2E | Afecta directamente la búsqueda y descubrimiento de productos. |
-| Caché devuelve resultados vencidos | Medio | Unitario | Es lógica determinista y rápida de validar. |
-| Cálculo incorrecto del rango virtual | Alto | Unitario y componente | Puede ocultar productos o degradar rendimiento. |
-| Favoritos no cambian de estado | Alto | Componente y E2E | Es una interacción principal del usuario. |
-| Ruta de detalle no carga | Alto | E2E | Valida integración de router, lazy loading y vista. |
-| Filtros se pierden al volver | Alto | E2E | Afecta continuidad de la experiencia de navegación. |
-
-## Pruebas unitarias
-
-Se prueban de forma aislada:
-
-- `useProductFilters`.
-- Utilidad de caché de resultados.
-- Cálculo de rango visible de la lista virtualizada.
-- Transformaciones puras de productos.
-- Reglas de negocio sin DOM, red real ni temporizadores reales.
-
-Las dependencias externas, como reloj, red o almacenamiento remoto, se simulan cuando afectan la determinación del resultado.
-
-## Pruebas de componentes
-
-Se prueban con Vue Test Utils y jsdom:
-
-- Texto visible generado a partir de props.
-- Emisión de eventos públicos.
-- Estados vacíos y estados de carga visibles.
-- Limitación de filas renderizadas en la lista virtualizada.
-- Estabilidad de renderizado con datos y props sin cambios relevantes.
-
-No se prueban nombres de métodos internos, estructura exacta de refs ni detalles privados de implementación.
-
-## Pruebas E2E
-
-Se ejecutan con Cypress sobre `vite preview` en el puerto 4173:
-
-1. Carga inicial del catálogo.
-2. Aplicación de filtro por texto.
-3. Apertura de detalle lazy-loaded.
-4. Regreso al catálogo conservando filtros.
-5. Marcado y desmarcado de favorito.
-
-Las respuestas HTTP se interceptan con fixtures deterministas. No se depende de una API externa ni del puerto 3000.
-
-## Pruebas excluidas
-
-Se excluyen deliberadamente:
-
-- Comparaciones de píxeles o snapshots visuales extensos.
-- Medición de rendimiento exacta dentro de jsdom.
-- Pruebas E2E para cada combinación posible de filtros.
-- Pruebas de implementación interna de Vue, Pinia o Vue Router.
-- Flujos dependientes de servicios externos reales.
-- Animaciones CSS y diferencias entre motores de renderizado.
-
-Estas pruebas se excluyen por fragilidad, costo de mantenimiento o bajo valor respecto al riesgo cubierto.
-
-## Criterios de calidad y cobertura
-
-- La suite unitaria y de componentes debe finalizar sin fallos.
-- Las pruebas E2E críticas deben pasar en Chrome.
-- La cobertura mínima global objetivo es 80 % para líneas, funciones y sentencias.
-- Las ramas de lógica crítica deben tener una cobertura mínima de 75 %.
-- Toda corrección de defecto debe incluir una prueba de regresión.
-- Los selectores E2E deben usar `data-cy`; no se usarán clases CSS ni texto como selector principal.
-
-## Ejecución automatizada
-
-| Momento | Comando | Propósito |
-|---|---|---|
-| Desarrollo | `npm run test` | Observación de pruebas unitarias y de componentes. |
-| Validación local | `npm run test:run` | Ejecución única de Vitest. |
-| Cobertura | `npm run test:coverage` | Generación de reporte V8. |
-| E2E interactivo | `npm run cypress:open` | Depuración en interfaz Cypress. |
-| E2E sin interfaz | `npm run e2e` | Ejecución reproducible sobre Vite preview. |
-
-## Mantenimiento y depuración
-
-- Aplicar el patrón preparar, ejecutar y verificar.
-- Cada prueba debe validar un comportamiento observable.
-- Usar fixtures para datos E2E repetibles.
-- Restablecer mocks, almacenamiento y datos compartidos entre casos.
-- Preferir `cy.intercept()` y `cy.wait('@alias')` sobre esperas fijas.
-- Investigar primero el error más próximo a la causa: unidad, componente o flujo E2E.
-```
-
-**Resultado esperado:**
-
-Existe una estrategia versionable que explica la distribución de pruebas, los riesgos cubiertos y las exclusiones deliberadas.
-
-**Verificación:**
-
-```bash
-cat docs/test-strategy.md
-```
-
-Confirma que aparecen las secciones `Pirámide de pruebas`, `Riesgos priorizados`, `Pruebas excluidas` y `Criterios de calidad y cobertura`.
-
----
-
-### Paso 3. Instalar y configurar Vitest, jsdom y cobertura V8
-
-**Objetivo:** preparar un entorno de pruebas rápido para lógica y componentes Vue.
-
-**Instrucciones:**
-
-1. Instala las dependencias de desarrollo.
-
-```bash
-npm install -D vitest@3.0.5 jsdom@26.0.0 @vue/test-utils@2.4.6 @vitest/coverage-v8@3.0.5 cypress@14.1.0 start-server-and-test
-```
-
-2. Abre `vite.config.ts` y conserva la configuración existente de Vue, alias y plugins. Añade la sección `test`.
-
-```ts
-import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vitest/config'
-import vue from '@vitejs/plugin-vue'
-
-export default defineConfig({
-  plugins: [vue()],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    include: ['src/**/*.{test,spec}.{js,ts}'],
-    setupFiles: ['./src/test/setupTests.ts'],
-    clearMocks: true,
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'html', 'json-summary'],
-      reportsDirectory: './coverage',
-      include: [
-        'src/composables/**/*.ts',
-        'src/utils/**/*.ts',
-        'src/components/**/*.vue',
-      ],
-      exclude: [
-        'src/main.ts',
-        'src/mocks/**',
-        'src/**/*.test.ts',
-        'src/test/**',
-      ],
-      thresholds: {
-        lines: 80,
-        functions: 80,
-        statements: 80,
-        branches: 75,
-      },
-    },
-  },
-})
-```
-
-3. Crea el archivo de preparación para pruebas.
-
-```bash
-mkdir -p src/test
-touch src/test/setupTests.ts
-```
-
-4. Añade el desmontaje automático de componentes y un mock mínimo para `matchMedia`.
-
-```ts
-import { afterEach } from 'vitest'
-import { enableAutoUnmount } from '@vue/test-utils'
-
-enableAutoUnmount(afterEach)
-
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    dispatchEvent: () => false,
-  }),
-})
-```
-
-5. Si el proyecto utiliza TypeScript, agrega los tipos de Vitest en el archivo TypeScript que incluya `src`. Normalmente será `tsconfig.app.json`.
-
-```json
-{
-  "compilerOptions": {
-    "types": ["vitest/globals", "node"]
-  }
-}
-```
-
-6. Actualiza la sección `scripts` de `package.json`.
-
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "cypress:open": "cypress open",
-    "cypress:run": "cypress run --browser chrome",
-    "e2e": "start-server-and-test \"npm run build && npm run preview -- --host 127.0.0.1 --port 4173\" http://127.0.0.1:4173 \"npm run cypress:run\""
-  }
-}
-```
-
-**Resultado esperado:**
-
-Vitest puede ejecutar pruebas en entorno `jsdom`, desmontar componentes entre casos y generar reportes de cobertura V8.
-
-**Verificación:**
-
-Ejecuta Vitest aunque todavía no existan pruebas.
-
-```bash
-npm run test:run
-```
-
-El resultado debe finalizar sin errores de configuración. Es aceptable que indique que no encontró archivos de prueba antes de crear la primera suite.
-
----
-
-### Paso 4. Crear pruebas unitarias para filtros, caché y rango virtual
-
-**Objetivo:** validar la lógica crítica de Catalogo Pro sin montar una aplicación completa.
-
-**Instrucciones:**
-
-1. Asegúrate de que el composable de filtros tenga una interfaz equivalente a la siguiente. Adapta nombres, pero conserva el comportamiento.
-
-```ts
-// src/composables/useProductFilters.ts
-import { computed, ref } from 'vue'
-
-export type Product = {
-  id: string
-  name: string
-  category: string
-  isFavorite: boolean
-}
-
-export function useProductFilters(products: () => Product[]) {
-  const search = ref('')
-  const category = ref('all')
-  const favoritesOnly = ref(false)
-
-  const filteredProducts = computed(() => {
-    const normalizedSearch = search.value.trim().toLowerCase()
-
-    return products().filter((product) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        product.name.toLowerCase().includes(normalizedSearch)
-
-      const matchesCategory =
-        category.value === 'all' || product.category === category.value
-
-      const matchesFavorite =
-        !favoritesOnly.value || product.isFavorite
-
-      return matchesSearch && matchesCategory && matchesFavorite
-    })
-  })
-
-  function resetFilters() {
-    search.value = ''
-    category.value = 'all'
-    favoritesOnly.value = false
-  }
-
-  return {
-    search,
-    category,
-    favoritesOnly,
-    filteredProducts,
-    resetFilters,
-  }
-}
-```
-
-2. Crea `src/composables/useProductFilters.test.ts`.
-
-```ts
-import { describe, expect, it } from 'vitest'
-import { useProductFilters } from './useProductFilters'
-
-const products = [
-  {
-    id: 'p-1',
-    name: 'Mouse inalámbrico',
-    category: 'peripherals',
-    isFavorite: true,
-  },
-  {
-    id: 'p-2',
-    name: 'Teclado mecánico',
-    category: 'peripherals',
-    isFavorite: false,
-  },
-  {
-    id: 'p-3',
-    name: 'Monitor 4K',
-    category: 'displays',
-    isFavorite: true,
-  },
-]
-
-describe('useProductFilters', () => {
-  it('filtra productos por texto sin distinguir mayúsculas', () => {
-    const { search, filteredProducts } = useProductFilters(() => products)
-
-    search.value = 'MOUSE'
-
-    expect(filteredProducts.value).toEqual([products[0]])
-  })
-
-  it('combina categoría y favoritos', () => {
-    const { category, favoritesOnly, filteredProducts } = useProductFilters(
-      () => products,
-    )
-
-    category.value = 'peripherals'
-    favoritesOnly.value = true
-
-    expect(filteredProducts.value).toEqual([products[0]])
-  })
-
-  it('restablece todos los filtros al estado inicial', () => {
-    const { search, category, favoritesOnly, resetFilters } =
-      useProductFilters(() => products)
-
-    search.value = 'monitor'
-    category.value = 'displays'
-    favoritesOnly.value = true
-
-    resetFilters()
-
-    expect(search.value).toBe('')
-    expect(category.value).toBe('all')
-    expect(favoritesOnly.value).toBe(false)
-  })
-})
-```
-
-3. Implementa o adapta una utilidad de caché con TTL.
-
-```ts
-// src/utils/productCache.ts
-type CacheEntry<T> = {
-  value: T
-  expiresAt: number
-}
-
-const cache = new Map<string, CacheEntry<unknown>>()
-
-export function setCachedResult<T>(
-  key: string,
-  value: T,
-  ttlMs: number,
-): void {
-  cache.set(key, {
-    value,
-    expiresAt: Date.now() + ttlMs,
-  })
-}
-
-export function getCachedResult<T>(key: string): T | null {
-  const entry = cache.get(key) as CacheEntry<T> | undefined
-
-  if (!entry) {
-    return null
-  }
-
-  if (Date.now() > entry.expiresAt) {
-    cache.delete(key)
-    return null
-  }
-
-  return entry.value
-}
-
-export function clearProductCache(): void {
-  cache.clear()
-}
-```
-
-4. Crea la prueba de caché.
-
-```ts
-// src/utils/productCache.test.ts
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  clearProductCache,
-  getCachedResult,
-  setCachedResult,
-} from './productCache'
-
-describe('productCache', () => {
-  afterEach(() => {
-    clearProductCache()
-    vi.useRealTimers()
-  })
-
-  it('recupera un resultado almacenado antes de que expire', () => {
-    setCachedResult('products:all', [{ id: 'p-1' }], 1_000)
-
-    expect(getCachedResult('products:all')).toEqual([{ id: 'p-1' }])
-  })
-
-  it('elimina y devuelve null cuando el resultado expiró', () => {
-    vi.useFakeTimers()
-    setCachedResult('products:all', [{ id: 'p-1' }], 1_000)
-
-    vi.advanceTimersByTime(1_001)
-
-    expect(getCachedResult('products:all')).toBeNull()
-  })
-
-  it('devuelve null para una clave inexistente', () => {
-    expect(getCachedResult('unknown')).toBeNull()
-  })
-})
-```
-
-5. Crea o adapta el cálculo de rango visible.
-
-```ts
-// src/utils/visibleRange.ts
-export type VisibleRange = {
-  start: number
-  end: number
-}
-
-export function calculateVisibleRange(
-  scrollTop: number,
-  viewportHeight: number,
-  itemHeight: number,
-  totalItems: number,
-  overscan = 2,
-): VisibleRange {
-  if (totalItems === 0) {
-    return { start: 0, end: 0 }
-  }
-
-  const firstVisibleIndex = Math.floor(scrollTop / itemHeight)
-  const visibleItems = Math.ceil(viewportHeight / itemHeight)
-
-  const start = Math.max(0, firstVisibleIndex - overscan)
-  const end = Math.min(
-    totalItems,
-    firstVisibleIndex + visibleItems + overscan,
-  )
-
-  return { start, end }
-}
-```
-
-6. Crea su prueba.
-
-```ts
-// src/utils/visibleRange.test.ts
-import { describe, expect, it } from 'vitest'
-import { calculateVisibleRange } from './visibleRange'
-
-describe('calculateVisibleRange', () => {
-  it('calcula el rango visible inicial con overscan', () => {
-    const range = calculateVisibleRange(0, 300, 50, 100, 2)
-
-    expect(range).toEqual({
-      start: 0,
-      end: 8,
-    })
-  })
-
-  it('calcula un rango intermedio sin salir de los límites', () => {
-    const range = calculateVisibleRange(500, 300, 50, 100, 2)
-
-    expect(range).toEqual({
-      start: 8,
-      end: 18,
-    })
-  })
-
-  it('limita el rango al total de elementos', () => {
-    const range = calculateVisibleRange(4_900, 300, 50, 100, 2)
-
-    expect(range).toEqual({
-      start: 96,
-      end: 100,
-    })
-  })
-
-  it('devuelve un rango vacío cuando no hay productos', () => {
-    expect(calculateVisibleRange(0, 300, 50, 0)).toEqual({
-      start: 0,
-      end: 0,
-    })
-  })
-})
-```
-
-**Resultado esperado:**
-
-Las reglas de filtrado, expiración de caché y cálculo de virtualización se validan sin depender de red, navegador real ni interfaz completa.
-
-**Verificación:**
-
-```bash
-npm run test:run
-```
-
-Debes observar suites verdes equivalentes a:
-
-```text
-✓ src/composables/useProductFilters.test.ts
-✓ src/utils/productCache.test.ts
-✓ src/utils/visibleRange.test.ts
-```
-
----
-
-### Paso 5. Preparar componentes con contratos y selectores `data-cy`
-
-**Objetivo:** hacer que los componentes críticos sean accesibles para pruebas de componentes y flujos E2E sin depender de clases CSS.
-
-**Instrucciones:**
-
-1. Actualiza `ProductRow.vue` para exponer información observable y emitir el evento de favorito.
-
-```vue
-<script setup lang="ts">
-type Product = {
-  id: string
-  name: string
-  category: string
-  price: number
-  isFavorite: boolean
-}
-
-defineProps<{
-  product: Product
-}>()
-
-const emit = defineEmits<{
-  toggleFavorite: [id: string]
-}>()
-</script>
-
-<template>
-  <article class="product-row" :data-cy="`product-row-${product.id}`">
-    <RouterLink
-      :to="{ name: 'product-detail', params: { id: product.id } }"
-      :data-cy="`product-detail-link-${product.id}`"
-    >
-      {{ product.name }}
-    </RouterLink>
-
-    <span data-cy="product-category">{{ product.category }}</span>
-
-    <button
-      type="button"
-      :aria-pressed="product.isFavorite"
-      :data-cy="`favorite-button-${product.id}`"
-      @click="emit('toggleFavorite', product.id)"
-    >
-      {{ product.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos' }}
-    </button>
-  </article>
-</template>
-```
-
-2. Añade selectores estables en `ProductFilters.vue`.
-
-```vue
-<template>
-  <form data-cy="product-filters" @submit.prevent>
-    <input
-      :value="search"
-      type="search"
-      data-cy="filter-search"
-      placeholder="Buscar productos"
-      @input="$emit('update:search', ($event.target as HTMLInputElement).value)"
-    >
-
-    <select
-      :value="category"
-      data-cy="filter-category"
-      @change="$emit('update:category', ($event.target as HTMLSelectElement).value)"
-    >
-      <option value="all">Todas las categorías</option>
-      <option value="peripherals">Periféricos</option>
-      <option value="displays">Pantallas</option>
-    </select>
-
-    <label>
-      <input
-        :checked="favoritesOnly"
-        type="checkbox"
-        data-cy="filter-favorites"
-        @change="$emit('update:favoritesOnly', ($event.target as HTMLInputElement).checked)"
-      >
-      Solo favoritos
-    </label>
-
-    <button type="button" data-cy="reset-filters" @click="$emit('reset')">
-      Limpiar filtros
-    </button>
-  </form>
-</template>
-```
-
-3. En `ProductListVirtualized.vue`, conserva la limitación de renderizado y aplica `v-memo` sobre cada fila cuando los datos estables no cambien.
-
-```vue
-<template>
-  <section
-    ref="container"
-    data-cy="virtual-product-list"
-    class="virtual-product-list"
-    @scroll="onScroll"
-  >
-    <div :style="{ height: `${totalHeight}px` }">
-      <div :style="{ transform: `translateY(${offsetTop}px)` }">
-        <ProductRow
-          v-for="product in visibleProducts"
-          :key="product.id"
-          v-memo="[product.id, product.isFavorite]"
-          :product="product"
-          @toggle-favorite="$emit('toggleFavorite', $event)"
-        />
-      </div>
-    </div>
-
-    <p v-if="products.length === 0" data-cy="empty-products">
-      No se encontraron productos.
-    </p>
-  </section>
-</template>
-```
-
-4. Agrega selectores a la vista de catálogo y detalle.
-
-```vue
-<!-- CatalogView.vue -->
-<template>
-  <main data-cy="catalog-page">
-    <h1>Catálogo de productos</h1>
-    <!-- ProductFilters y ProductListVirtualized -->
-  </main>
-</template>
-```
-
-```vue
-<!-- ProductDetailView.vue -->
-<template>
-  <main data-cy="product-detail-page">
-    <RouterLink :to="{ name: 'catalog', query: $route.query }" data-cy="back-to-catalog">
-      Volver al catálogo
-    </RouterLink>
-
-    <h1 data-cy="product-detail-name">{{ product.name }}</h1>
-  </main>
-</template>
-```
-
-> El enlace de regreso debe conservar `query: $route.query`, o una estrategia equivalente, para preservar filtros tras volver al catálogo.
-
-**Resultado esperado:**
-
-La interfaz expone selectores semánticos y estables que representan contratos de usuario, no detalles visuales internos.
-
-**Verificación:**
-
-Inicia la aplicación:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-En Chrome, inspecciona un producto y confirma la existencia de atributos similares a:
-
-```html
-<button data-cy="favorite-button-p-1">
-```
-
-Detén el servidor con `Ctrl+C`.
-
----
-
-### Paso 6. Crear pruebas de componentes con Vue Test Utils
-
-**Objetivo:** comprobar propiedades, eventos, estados vacíos y comportamiento observable del listado virtualizado.
-
-**Instrucciones:**
-
-1. Crea `src/components/ProductRow.test.ts`.
-
-```ts
-import { mount, RouterLinkStub } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
-import ProductRow from './ProductRow.vue'
-
-const product = {
-  id: 'p-1',
-  name: 'Mouse inalámbrico',
-  category: 'peripherals',
-  price: 49.99,
-  isFavorite: false,
-}
-
-describe('ProductRow', () => {
-  it('muestra el nombre y la categoría recibidos', () => {
-    const wrapper = mount(ProductRow, {
-      props: { product },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
-
-    expect(wrapper.get('[data-cy="product-row-p-1"]').text()).toContain(
-      'Mouse inalámbrico',
-    )
-    expect(wrapper.get('[data-cy="product-category"]').text()).toBe(
-      'peripherals',
-    )
-  })
-
-  it('emite el identificador al cambiar favorito', async () => {
-    const wrapper = mount(ProductRow, {
-      props: { product },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
-
-    await wrapper.get('[data-cy="favorite-button-p-1"]').trigger('click')
-
-    expect(wrapper.emitted('toggleFavorite')).toEqual([['p-1']])
-  })
-
-  it('comunica el estado favorito mediante aria-pressed', () => {
-    const wrapper = mount(ProductRow, {
-      props: {
-        product: {
-          ...product,
-          isFavorite: true,
-        },
-      },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
-
-    expect(
-      wrapper.get('[data-cy="favorite-button-p-1"]').attributes('aria-pressed'),
-    ).toBe('true')
-  })
-})
-```
-
-2. Crea `src/components/ProductFilters.test.ts`.
-
-```ts
-import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
-import ProductFilters from './ProductFilters.vue'
-
-describe('ProductFilters', () => {
-  function createWrapper() {
-    return mount(ProductFilters, {
-      props: {
-        search: '',
-        category: 'all',
-        favoritesOnly: false,
-      },
-    })
-  }
-
-  it('emite el nuevo texto de búsqueda', async () => {
-    const wrapper = createWrapper()
-
-    await wrapper.get('[data-cy="filter-search"]').setValue('mouse')
-
-    expect(wrapper.emitted('update:search')).toEqual([['mouse']])
-  })
-
-  it('emite la categoría seleccionada', async () => {
-    const wrapper = createWrapper()
-
-    await wrapper
-      .get('[data-cy="filter-category"]')
-      .setValue('peripherals')
-
-    expect(wrapper.emitted('update:category')).toEqual([['peripherals']])
-  })
-
-  it('emite el estado de favoritos y permite reiniciar', async () => {
-    const wrapper = createWrapper()
-
-    await wrapper.get('[data-cy="filter-favorites"]').setValue(true)
-    await wrapper.get('[data-cy="reset-filters"]').trigger('click')
-
-    expect(wrapper.emitted('update:favoritesOnly')).toEqual([[true]])
-    expect(wrapper.emitted('reset')).toHaveLength(1)
-  })
-})
-```
-
-3. Crea `src/components/ProductListVirtualized.test.ts`. Este ejemplo asume que el componente acepta `products`, `itemHeight` y `viewportHeight`. Adapta los nombres de props si tu implementación del laboratorio anterior es distinta.
-
-```ts
-import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
-import ProductListVirtualized from './ProductListVirtualized.vue'
-
-const products = Array.from({ length: 100 }, (_, index) => ({
-  id: `p-${index + 1}`,
-  name: `Producto ${index + 1}`,
-  category: 'peripherals',
-  price: index + 10,
-  isFavorite: false,
-}))
-
-describe('ProductListVirtualized', () => {
-  it('muestra solo las filas necesarias para el viewport inicial', () => {
-    const wrapper = mount(ProductListVirtualized, {
-      props: {
-        products,
-        itemHeight: 50,
-        viewportHeight: 200,
-      },
-      global: {
-        stubs: {
-          ProductRow: {
-            props: ['product'],
-            template: '<article data-cy="virtual-row">{{ product.name }}</article>',
-          },
-        },
-      },
-    })
-
-    const rows = wrapper.findAll('[data-cy="virtual-row"]')
-
-    expect(rows.length).toBeLessThan(products.length)
-    expect(rows.length).toBeGreaterThan(0)
-  })
-
-  it('muestra un estado vacío cuando no recibe productos', () => {
-    const wrapper = mount(ProductListVirtualized, {
-      props: {
-        products: [],
-        itemHeight: 50,
-        viewportHeight: 200,
-      },
-    })
-
-    expect(wrapper.get('[data-cy="empty-products"]').text()).toBe(
-      'No se encontraron productos.',
-    )
-  })
-
-  it('emite el identificador de la fila al alternar favorito', async () => {
-    const wrapper = mount(ProductListVirtualized, {
-      props: {
-        products: products.slice(0, 5),
-        itemHeight: 50,
-        viewportHeight: 200,
-      },
-      global: {
-        stubs: {
-          ProductRow: {
-            props: ['product'],
-            emits: ['toggleFavorite'],
-            template: `
-              <button
-                data-cy="virtual-favorite"
-                @click="$emit('toggleFavorite', product.id)"
-              >
-                Favorite
-              </button>
-            `,
-          },
-        },
-      },
-    })
-
-    await wrapper.get('[data-cy="virtual-favorite"]').trigger('click')
-
-    expect(wrapper.emitted('toggleFavorite')).toEqual([['p-1']])
-  })
-
-  it('no vuelve a renderizar una fila memorizada ante props externas estables', async () => {
-    const rowRenderSpy = vi.fn()
-
-    const wrapper = mount(ProductListVirtualized, {
-      props: {
-        products: products.slice(0, 5),
-        itemHeight: 50,
-        viewportHeight: 200,
-      },
-      global: {
-        stubs: {
-          ProductRow: {
-            props: ['product'],
-            setup() {
-              rowRenderSpy()
-              return {}
-            },
-            template: '<article data-cy="virtual-row">row</article>',
-          },
-        },
-      },
-    })
-
-    const initialCalls = rowRenderSpy.mock.calls.length
-
-    await wrapper.setProps({
-      products: products.slice(0, 5),
-    })
-
-    expect(rowRenderSpy.mock.calls.length).toBeLessThanOrEqual(initialCalls + 5)
-  })
-})
-```
-
-4. Interpreta la última prueba correctamente: `v-memo` no debe probarse observando una variable interna de Vue. La prueba comprueba que un cambio de contenedor con productos equivalentes no provoque un crecimiento descontrolado de renderizados de filas visibles.
-
-**Resultado esperado:**
-
-Las pruebas de componentes validan contratos públicos: contenido visible, eventos emitidos, accesibilidad y reducción del renderizado.
-
-**Verificación:**
-
-```bash
-npm run test:run
-```
-
-El resultado debe incluir seis o más suites verdes, según los archivos creados.
-
----
-
-### Paso 7. Configurar Cypress y datos deterministas
-
-**Objetivo:** preparar Cypress para probar la aplicación compilada mediante `vite preview` en el puerto `4173`.
-
-**Instrucciones:**
-
-1. Inicializa la estructura de Cypress sin abrir la interfaz.
-
-```bash
-mkdir -p cypress/e2e cypress/fixtures cypress/support
-```
-
-2. Crea `cypress.config.ts`.
-
-```ts
-import { defineConfig } from 'cypress'
-
-export default defineConfig({
-  e2e: {
-    baseUrl: 'http://127.0.0.1:4173',
-    specPattern: 'cypress/e2e/**/*.cy.{js,ts}',
-    supportFile: 'cypress/support/e2e.ts',
-    video: false,
-    screenshotOnRunFailure: true,
-    viewportWidth: 1366,
-    viewportHeight: 768,
-  },
-})
-```
-
-3. Crea `cypress/support/e2e.ts`.
-
-```ts
-beforeEach(() => {
-  cy.clearLocalStorage()
-})
-```
-
-4. Crea un fixture determinista en `cypress/fixtures/products.json`.
-
-```json
-[
-  {
-    "id": "p-1",
-    "name": "Mouse inalámbrico",
-    "category": "peripherals",
-    "price": 49.99,
-    "isFavorite": false
-  },
-  {
-    "id": "p-2",
-    "name": "Teclado mecánico",
-    "category": "peripherals",
-    "price": 89.99,
-    "isFavorite": false
-  },
-  {
-    "id": "p-3",
-    "name": "Monitor 4K",
-    "category": "displays",
-    "price": 399.99,
-    "isFavorite": true
-  }
-]
-```
-
-5. Confirma la URL usada por el repositorio para recuperar productos. Para una API REST simulada, debe apuntar al endpoint constante:
-
-```text
-http://127.0.0.1:5173/api
-```
-
-6. En las pruebas E2E interceptarás rutas con un patrón equivalente a:
-
-```text
-**/api/products*
-```
-
-> Si Catalogo Pro usa GraphQL, reemplaza la interceptación REST por `**/graphql` y responde según `req.body.operationName`. No uses una API real para estas pruebas.
-
-**Resultado esperado:**
-
-Cypress puede localizar los archivos de prueba y ejecutarlos contra una aplicación compilada en un puerto independiente del servidor de desarrollo.
-
-**Verificación:**
-
-```bash
-npx cypress verify
-```
-
-Debes obtener un mensaje equivalente a:
-
-```text
-Verified Cypress!
-```
-
----
-
-### Paso 8. Automatizar los flujos E2E críticos
-
-**Objetivo:** validar los recorridos de negocio principales desde la perspectiva de un usuario real.
-
-**Instrucciones:**
-
-1. Crea `cypress/e2e/catalog.cy.ts`.
-
-```ts
-describe('Catálogo de productos', () => {
-  beforeEach(() => {
-    cy.fixture('products.json').then((products) => {
-      cy.intercept('GET', '**/api/products*', {
-        statusCode: 200,
-        body: products,
-      }).as('getProducts')
-
-      cy.intercept('GET', '**/api/products/p-*', (request) => {
-        const productId = request.url.split('/').pop()
-        const product = products.find(
-          (item: { id: string }) => item.id === productId,
-        )
-
-        request.reply({
-          statusCode: product ? 200 : 404,
-          body: product,
-        })
-      }).as('getProduct')
-    })
-
-    cy.visit('/products')
-    cy.wait('@getProducts')
-    cy.get('[data-cy="catalog-page"]').should('be.visible')
-  })
-
-  it('carga el catálogo y aplica un filtro por texto', () => {
-    cy.get('[data-cy="product-row-p-1"]').should('contain.text', 'Mouse inalámbrico')
-    cy.get('[data-cy="product-row-p-2"]').should('contain.text', 'Teclado mecánico')
-
-    cy.get('[data-cy="filter-search"]').type('mouse')
-
-    cy.get('[data-cy="product-row-p-1"]').should('be.visible')
-    cy.get('[data-cy="product-row-p-2"]').should('not.exist')
-    cy.location('search').should('contain', 'search=mouse')
-  })
-
-  it('abre el detalle lazy-loaded y vuelve preservando el filtro', () => {
-    cy.get('[data-cy="filter-search"]').type('mouse')
-
-    cy.get('[data-cy="product-detail-link-p-1"]').click()
-
-    cy.location('pathname').should('eq', '/products/p-1')
-    cy.get('[data-cy="product-detail-page"]').should('be.visible')
-    cy.get('[data-cy="product-detail-name"]').should(
-      'contain.text',
-      'Mouse inalámbrico',
-    )
-
-    cy.get('[data-cy="back-to-catalog"]').click()
-
-    cy.location('pathname').should('eq', '/products')
-    cy.get('[data-cy="filter-search"]').should('have.value', 'mouse')
-    cy.get('[data-cy="product-row-p-1"]').should('be.visible')
-    cy.get('[data-cy="product-row-p-2"]').should('not.exist')
-  })
-
-  it('marca y desmarca un producto favorito', () => {
-    const favoriteButton = '[data-cy="favorite-button-p-1"]'
-
-    cy.get(favoriteButton)
-      .should('have.attr', 'aria-pressed', 'false')
-      .click()
-      .should('have.attr', 'aria-pressed', 'true')
-
-    cy.get(favoriteButton)
-      .click()
-      .should('have.attr', 'aria-pressed', 'false')
-  })
-})
-```
-
-2. Ajusta la ruta inicial si tu catálogo no usa `/products`. Por ejemplo, si la ruta de catálogo es `/`, sustituye:
-
-```ts
-cy.visit('/products')
-```
-
-por:
-
-```ts
-cy.visit('/')
-```
-
-3. Confirma que el nombre de ruta utilizado en `ProductRow.vue` corresponde a la ruta real del detalle.
-
-4. Ejecuta las pruebas E2E sin interfaz.
-
-```bash
-npm run e2e
-```
-
-5. Para depurar visualmente una prueba, ejecuta:
-
-```bash
-npm run cypress:open
-```
-
-En la interfaz de Cypress, selecciona **E2E Testing**, el navegador Chrome y el archivo `catalog.cy.ts`.
-
-**Resultado esperado:**
-
-Cypress construye la aplicación, inicia `vite preview` en `http://127.0.0.1:4173`, intercepta respuestas deterministas y ejecuta los tres flujos críticos sin usar esperas fijas.
-
-**Verificación:**
-
-La salida debe mostrar un resultado equivalente a:
-
-```text
-3 passing
-```
-
-Además, confirma que no existen comandos como los siguientes en la suite E2E:
-
-```ts
-cy.wait(1000)
-cy.wait(2000)
-```
-
-Las esperas deben basarse en estado observable, alias HTTP, elementos visibles, valores de campos o cambios de URL.
-
----
-
-### Paso 9. Generar cobertura y consolidar la validación local
-
-**Objetivo:** validar que las suites están verdes, revisar cobertura y preparar el repositorio para CI/CD.
-
-**Instrucciones:**
-
-1. Ejecuta las pruebas unitarias y de componentes con cobertura.
+## Paso 3. Romperla a propósito y leer el error (3 minutos)
+
+**Qué vas a hacer y por qué:** depurar empieza por leer bien el mensaje. Vas a meter un error real y seguir la pista que deja Vitest hasta la línea culpable.
+
+1. Arranca Vitest en modo vigilancia y déjalo abierto:
+
+   ```bash
+   npm test
+   ```
+
+2. En `src/utils/filtrarProductos.js`, en la última línea, cambia `p.nombre.toLowerCase().includes(buscado)` por `p.nombre.includes(buscado)` y guarda.
+
+3. **Predice:** ¿qué caso falla y qué lista recibirá?
+
+**Qué debes ver:** Vitest repite solo las pruebas y marca en rojo el caso normal: `expected [] to deeply equal [ 1, 3 ]`, con el bloque `- Expected` y `+ Received`, la ubicación `❯ src/utils/filtrarProductos.test.js:13:40` y un `^` debajo de la línea de `expect` que falló. Abajo queda `FAIL  Tests failed. Watching for file changes...`: sigue vigilando. "Mouse" empieza con mayúscula y ya no coincide con "mo".
+
+4. Deshaz el cambio (`Ctrl + Z`) y guarda: vuelve a `3 passed`. Pulsa `q` para salir del modo vigilancia.
+
+## Paso 4. Probar un componente por lo que muestra y avisa (7 minutos)
+
+**Qué vas a hacer y por qué:** la tarjeta recibe un producto y avisa `alternar` cuando pulsan la estrella. Eso es todo su contrato, y eso es lo que se prueba; no sus variables internas.
+
+1. Crea `src/components/TarjetaProducto.vue`:
+
+   ```html
+   <script setup>
+   defineProps({                                    // lo que entra desde el catálogo
+     producto: { type: Object, required: true },    // { id, nombre, precio }
+     favorito: { type: Boolean, default: false }    // true si el producto está marcado
+   })
+   const emit = defineEmits(['alternar'])           // lo que sale: el aviso alternar
+   </script>
+
+   <template>
+     <article data-cy="tarjeta">                    <!-- data-cy: marca para la prueba E2E -->
+       <h2>{{ producto.nombre }}</h2>               <!-- nombre del producto -->
+       <p data-testid="precio">$ {{ producto.precio }}</p> <!-- data-testid: marca para la prueba de componente -->
+       <button
+         type="button"
+         data-cy="favorito"
+         :aria-pressed="favorito"
+         :aria-label="(favorito ? 'Quitar de favoritos: ' : 'Marcar como favorito: ') + producto.nombre"
+         @click="emit('alternar', producto.id)"
+       >{{ favorito ? '★' : '☆' }}</button>        <!-- estrella llena o vacía -->
+     </article>
+   </template>
+   ```
+
+2. Crea `src/components/TarjetaProducto.test.js`:
+
+   ```js
+   import { describe, it, expect } from 'vitest'           // piezas de Vitest
+   import { mount } from '@vue/test-utils'                 // monta el componente en el documento de jsdom
+   import TarjetaProducto from './TarjetaProducto.vue'     // el componente que se prueba
+
+   const base = { id: 7, nombre: 'Teclado', precio: 89900 } // producto de prueba
+   const montar = (extra) =>                               // atajo: monta la tarjeta con la base...
+     mount(TarjetaProducto, { props: { producto: base, ...extra } }) // ...y las props que cambien
+
+   describe('TarjetaProducto', () => {
+     it('muestra el nombre y el precio que recibe', () => {
+       const wrapper = montar()                                       // preparar
+       expect(wrapper.get('h2').text()).toBe('Teclado')               // ¿nombre?
+       expect(wrapper.get('[data-testid="precio"]').text()).toBe('$ 89900') // ¿precio?
+     })
+
+     it('avisa alternar con el id al pulsar la estrella', async () => {
+       const wrapper = montar()
+       await wrapper.get('button').trigger('click')                   // clic y espera el redibujo
+       expect(wrapper.emitted('alternar')).toEqual([[7]])             // un aviso, con el id 7
+     })
+
+     it('muestra la estrella llena cuando es favorito', () => {
+       const boton = montar({ favorito: true }).get('button')         // la base, pero marcada
+       expect(boton.text()).toBe('★')                                 // lo que ve la persona
+       expect(boton.attributes('aria-pressed')).toBe('true')          // lo que oye el lector de pantalla
+     })
+   })
+   ```
+
+3. **Predice:** en la segunda prueba, ¿qué devuelve `emitted('alternar')` si la tarjeta avisara dos veces? Ejecuta:
+
+   ```bash
+   npm run test:run
+   ```
+
+**Qué debes ver:** `Test Files  2 passed (2)` y `Tests  6 passed (6)`. Ninguna prueba busca clases CSS: si mañana cambian los estilos, siguen en verde.
+
+## Paso 5. El catálogo completo y su prueba con un doble (10 minutos)
+
+**Qué vas a hacer y por qué:** el catálogo pide los productos a un servicio. La prueba no debe depender de la red, así que le entregas un **doble**: un servicio de mentira hecho con `vi.fn()` que responde lo que tú digas.
+
+1. Crea los datos de ejemplo en `public/api/productos.json` (cópialo tal cual, no es el tema de hoy). Vite sirve la carpeta `public` tal como está:
+
+   ```json
+   [
+     { "id": 1, "nombre": "Mouse inalámbrico", "precio": 49900 },
+     { "id": 2, "nombre": "Teclado mecánico", "precio": 189900 },
+     { "id": 3, "nombre": "Monitor 4K", "precio": 1299000 },
+     { "id": 4, "nombre": "Cámara web", "precio": 159900 },
+     { "id": 5, "nombre": "Audífonos", "precio": 99900 }
+   ]
+   ```
+
+2. Crea el servicio real en `src/api.js`:
+
+   ```js
+   // Servicio real de datos. En las pruebas de componente se reemplaza por un doble.
+   export const api = {
+     async listarProductos() {                                      // devuelve la lista de productos
+       const respuesta = await fetch('/api/productos.json')         // archivo que Vite sirve desde public/
+       if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`) // un 404 o un 500 se vuelven error
+       return respuesta.json()                                      // convierte el texto JSON en objetos
+     }
+   }
+   ```
+
+3. Reemplaza todo `src/main.js` para entregar el servicio con `provide`:
+
+   ```js
+   import { createApp } from 'vue'          // crea la aplicación
+   import './style.css'                    // estilos de la plantilla de Vite
+   import App from './App.vue'             // componente raíz
+   import { api } from './api.js'          // servicio real de datos
+
+   createApp(App).provide('api', api).mount('#app') // entrega el servicio a quien lo pida con inject
+   ```
+
+4. Reemplaza todo `src/App.vue`:
+
+   ```html
+   <script setup>
+   import { ref, computed, inject, onMounted } from 'vue'          // herramientas de Vue que ya conoces
+   import TarjetaProducto from './components/TarjetaProducto.vue'  // la tarjeta del paso 4
+   import { filtrarProductos } from './utils/filtrarProductos.js'  // la función pura del paso 2
+
+   const api = inject('api')        // servicio de datos: main.js entrega el real; la prueba, un doble
+   const productos = ref([])        // lista que llega del servidor
+   const texto = ref('')            // lo que se escribe en el buscador
+   const favoritos = ref([])        // ids marcados con estrella
+   const cargando = ref(true)       // true mientras llega la respuesta
+   const error = ref('')            // mensaje si el servidor falla
+
+   // computed guarda el resultado y solo lo recalcula si cambian productos o texto (memoización, capítulo 6)
+   const visibles = computed(() => filtrarProductos(productos.value, texto.value))
+
+   function alternar(id) {                            // marca o desmarca un favorito
+     favoritos.value = favoritos.value.includes(id)   // ¿ya estaba marcado?
+       ? favoritos.value.filter((f) => f !== id)      // sí: lo quita
+       : [...favoritos.value, id]                     // no: lo agrega en una lista nueva
+   }
+
+   onMounted(async () => {                            // al aparecer en pantalla, pide los productos
+     try {                                            // intenta...
+       productos.value = await api.listarProductos()  // ...esperar la respuesta del servicio
+     } catch {                                        // si la promesa falla...
+       error.value = 'No se pudo cargar el catálogo.' // ...deja un aviso visible
+     } finally {                                      // con o sin error...
+       cargando.value = false                         // ...termina la espera
+     }
+   })
+   </script>
+
+   <template>
+     <main>
+       <h1>Catálogo Pro</h1>
+       <label for="buscar">Buscar producto</label>               <!-- etiqueta unida al campo por for e id -->
+       <input id="buscar" v-model="texto" data-cy="buscar" />     <!-- v-model: el campo y texto van juntos -->
+       <p v-if="cargando" role="status">Cargando productos...</p> <!-- mientras llega la respuesta -->
+       <p v-else-if="error" role="alert">{{ error }}</p>          <!-- role alert: el lector de pantalla lo anuncia -->
+       <template v-else>                                          <!-- solo cuando hay datos -->
+         <p data-cy="resumen">Favoritos: {{ favoritos.length }} de {{ productos.length }}</p>
+         <p v-if="visibles.length === 0">No hay productos con ese nombre.</p>
+         <ul>
+           <li v-for="p in visibles" :key="p.id">                 <!-- una fila por producto visible -->
+             <TarjetaProducto :producto="p" :favorito="favoritos.includes(p.id)" @alternar="alternar" />
+           </li>
+         </ul>
+       </template>
+     </main>
+   </template>
+   ```
+
+5. Borra el componente de bienvenida de la plantilla, que ya nadie usa. Si no lo borras, la cobertura del paso 6 lo cuenta como código sin probar. En el explorador de VS Code: clic derecho sobre `src/components/HelloWorld.vue` y **Eliminar**. Si prefieres la terminal, este comando sirve igual en Windows, macOS y Linux:
+
+   ```bash
+   node -e "require('fs').rmSync('src/components/HelloWorld.vue')"
+   ```
+
+6. Mira el catálogo funcionando. Arranca el servidor de desarrollo en el puerto 5177 (`npx vite` es el mismo Vite de `npm run dev` y recibe el puerto sin el `--` que PowerShell se come):
+
+   ```bash
+   npx vite --port 5177
+   ```
+
+   Abre `http://localhost:5177`, escribe "mo" en el buscador (quedan Mouse inalámbrico y Monitor 4K) y marca una estrella (el resumen pasa a `Favoritos: 1 de 5`). Luego detén el servidor con `Ctrl + C`.
+
+7. Crea la prueba del catálogo en `src/App.test.js`:
+
+   ```js
+   import { describe, it, expect, vi } from 'vitest'           // vi crea dobles
+   import { mount, flushPromises } from '@vue/test-utils'     // flushPromises espera las promesas pendientes
+   import App from './App.vue'                                 // el catálogo completo
+
+   const productos = [                                         // lo que "responde" el servicio de mentira
+     { id: 1, nombre: 'Mouse inalámbrico', precio: 49900 },
+     { id: 2, nombre: 'Teclado mecánico', precio: 189900 }
+   ]
+   const montar = (api) => mount(App, { global: { provide: { api } } }) // entrega el doble como lo haría main.js
+
+   describe('Catálogo', () => {
+     it('pide los productos una vez y los muestra', async () => {
+       const api = { listarProductos: vi.fn().mockResolvedValue(productos) } // doble que responde bien
+       const wrapper = montar(api)
+       expect(wrapper.text()).toContain('Cargando productos...') // antes de la respuesta
+       await flushPromises()                                     // espera la causa: la respuesta
+       expect(api.listarProductos).toHaveBeenCalledOnce()        // pidió una sola vez
+       expect(wrapper.findAll('li')).toHaveLength(2)             // y dibujó dos filas
+     })
+
+     it('filtra con lo que escribe la persona', async () => {
+       const wrapper = montar({ listarProductos: vi.fn().mockResolvedValue(productos) })
+       await flushPromises()
+       await wrapper.get('#buscar').setValue('tecla')            // escribe en el campo y espera
+       expect(wrapper.findAll('li')).toHaveLength(1)             // solo el teclado
+       await wrapper.get('#buscar').setValue('zzz')              // un texto que nadie tiene
+       expect(wrapper.text()).toContain('No hay productos con ese nombre.')
+     })
+
+     it('marca y desmarca un favorito y actualiza el resumen', async () => {
+       const wrapper = montar({ listarProductos: vi.fn().mockResolvedValue(productos) })
+       await flushPromises()
+       await wrapper.get('button').trigger('click')              // marca el primero
+       expect(wrapper.get('[data-cy="resumen"]').text()).toBe('Favoritos: 1 de 2')
+       await wrapper.get('button').trigger('click')              // lo desmarca
+       expect(wrapper.get('[data-cy="resumen"]').text()).toBe('Favoritos: 0 de 2')
+     })
+
+     it('muestra un aviso si el servidor falla', async () => {
+       const api = { listarProductos: vi.fn().mockRejectedValue(new Error('HTTP 500')) } // doble que falla
+       const wrapper = montar(api)
+       await flushPromises()
+       expect(wrapper.get('[role="alert"]').text()).toBe('No se pudo cargar el catálogo.')
+     })
+   })
+   ```
+
+8. **Predice:** si quitaras la línea `await flushPromises()` de la primera prueba, ¿qué fallaría? (Respuesta: la cuenta de filas, porque la lista aún está vacía mientras la respuesta no llega.) Ejecuta:
+
+   ```bash
+   npm run test:run
+   ```
+
+**Qué debes ver:** `Test Files  3 passed (3)` y `Tests  10 passed (10)`, en pocos segundos y sin abrir ningún navegador. Sin la prueba del favorito, `alternar` quedaría sin ejecutar y la cobertura de funciones del paso 6 bajaría a 75 %, por debajo del mínimo de la estrategia.
+
+## Paso 6. Medir la cobertura (3 minutos)
+
+**Qué vas a hacer y por qué:** la cobertura dice qué líneas ejecutaron las pruebas. Sirve para encontrar zonas que nadie tocó, no como meta: una línea ejecutada no es una línea comprobada.
 
 ```bash
 npm run test:coverage
 ```
 
-2. Revisa el resumen mostrado en la terminal.
+**Qué debes ver:** una tabla con `App.vue`, `TarjetaProducto.vue` y `filtrarProductos.js`, con `All files` en 100 % de líneas, ramas y funciones, y ningún mensaje `ERROR: Coverage for ... does not meet global threshold`. El detalle línea por línea queda en `coverage/index.html`: ábrelo en Chrome y busca las líneas en rojo.
 
-3. Abre el reporte HTML local.
+`main.js` y `api.js` no aparecen: se excluyeron en `vite.config.js` porque solo arrancan la aplicación y llaman a la red, y eso lo prueba la E2E del paso 7. Es el mismo criterio de exclusión de tu estrategia.
 
-```bash
-open coverage/index.html
-```
+## Paso 7. Tres recorridos E2E con Cypress (8 minutos)
 
-En Ubuntu, si `open` no está disponible:
+**Qué vas a hacer y por qué:** arriba de la pirámide van pocas pruebas, en un navegador real, para los recorridos que no pueden fallar. Cypress responde por el servidor con datos fijos (`cy.intercept`), así la prueba da el mismo resultado hoy y mañana.
 
-```bash
-xdg-open coverage/index.html
-```
+1. Crea `cypress.config.js` en la raíz del proyecto:
 
-En Windows PowerShell:
+   ```js
+   import { defineConfig } from 'cypress'          // armador de la configuración
 
-```powershell
-start coverage\index.html
-```
+   export default defineConfig({
+     e2e: {
+       baseUrl: 'http://127.0.0.1:4177',            // la aplicación compilada que sirve vite preview
+       specPattern: 'cypress/e2e/**/*.cy.js',       // qué archivos son pruebas E2E
+       supportFile: false,                          // no usamos archivo de preparación común
+       video: false                                 // no graba video: termina antes
+     }
+   })
+   ```
 
-4. Identifica archivos con cobertura menor al objetivo. Prioriza primero:
+2. Crea los datos fijos en `cypress/fixtures/productos.json`. Son tres productos, no los cinco de `public/api`:
+
+   ```json
+   [
+     { "id": 1, "nombre": "Mouse inalámbrico", "precio": 49900 },
+     { "id": 2, "nombre": "Teclado mecánico", "precio": 189900 },
+     { "id": 3, "nombre": "Monitor 4K", "precio": 1299000 }
+   ]
+   ```
+
+3. Crea `cypress/e2e/catalogo.cy.js`:
+
+   ```js
+   // Abre el catálogo y responde por el servidor con lo que diga cada prueba
+   function abrirCatalogo(respuesta) {
+     cy.intercept('GET', '**/api/productos.json', respuesta).as('productos') // atrapa la petición
+     cy.visit('/')                                 // abre la página: la intercepción quedó registrada antes
+     cy.wait('@productos')                         // espera la causa, nunca un número de segundos
+   }
+
+   describe('Catálogo Pro en Chrome', () => {
+     it('carga el catálogo y filtra por nombre', () => {
+       abrirCatalogo({ fixture: 'productos.json' })                  // responde con los datos fijos
+       cy.get('[data-cy="tarjeta"]').should('have.length', 3)        // los 3 de la fixture
+       cy.get('[data-cy="buscar"]').type('mouse')                    // escribe como una persona
+       cy.get('[data-cy="tarjeta"]').should('have.length', 1).and('contain', 'Mouse inalámbrico')
+     })
+
+     it('marca y desmarca un favorito', () => {
+       abrirCatalogo({ fixture: 'productos.json' })
+       cy.get('[data-cy="favorito"]').first().click().should('have.attr', 'aria-pressed', 'true')
+       cy.get('[data-cy="resumen"]').should('have.text', 'Favoritos: 1 de 3')
+       cy.get('[data-cy="favorito"]').first().click().should('have.attr', 'aria-pressed', 'false')
+       cy.get('[data-cy="resumen"]').should('have.text', 'Favoritos: 0 de 3')
+     })
+
+     it('avisa cuando el servidor falla', () => {
+       abrirCatalogo({ statusCode: 500, body: {} })                   // el servidor responde con error
+       cy.get('[role="alert"]').should('have.text', 'No se pudo cargar el catálogo.')
+     })
+   })
+   ```
+
+4. **Predice:** en la primera prueba, ¿cuántas tarjetas verá Cypress, 5 o 3? Ejecuta:
+
+   ```bash
+   npm run e2e
+   ```
+
+**Qué debes ver:** la compilación, el aviso de `preview` en `http://127.0.0.1:4177` y, al final:
 
 ```text
-src/composables/useProductFilters.ts
-src/utils/productCache.ts
-src/utils/visibleRange.ts
-src/components/ProductRow.vue
-src/components/ProductFilters.vue
-src/components/ProductListVirtualized.vue
+  Catálogo Pro en Chrome
+    ✓ carga el catálogo y filtra por nombre
+    ✓ marca y desmarca un favorito
+    ✓ avisa cuando el servidor falla
+  3 passing
+  ✔  All specs passed!
 ```
 
-5. Ejecuta la validación completa.
+Son 3 tarjetas: Cypress atrapó la petición y respondió con la fixture. Busca en el archivo: no hay ningún `cy.wait` con un número.
 
-```bash
-npm run test:run && npm run e2e
-```
+### Opcional (3 minutos): depurar con la ventana de Cypress
 
-6. Revisa los cambios generados.
+1. En una terminal, `npm run build` y luego `npm run preview`. En otra terminal, `npx cypress open`.
+2. Elige **E2E Testing**, Chrome y `catalogo.cy.js`. Pasa el ratón por cada paso del panel izquierdo: Cypress muestra la página como estaba en ese momento.
+3. Agrega `cy.pause()` después de `abrirCatalogo(...)` en la segunda prueba, guarda y usa el botón de avanzar paso a paso. Al terminar, quítalo y cierra ambas terminales con `Ctrl + C`.
 
-```bash
-git status
-```
+## Resultado esperado
 
-7. Confirma los artefactos relevantes.
+- `docs/test-strategy.md` con pirámide, riesgos y exclusiones.
+- `npm run test:run`: 10 pruebas unitarias y de componentes en verde.
+- `npm run test:coverage`: reporte V8 con 80 % de líneas o más.
+- `npm run e2e`: tres recorridos de Cypress aprobados en Chrome.
 
-```bash
-git add docs/test-strategy.md \
-  vite.config.ts \
-  package.json \
-  package-lock.json \
-  tsconfig.app.json \
-  src \
-  cypress \
-  cypress.config.ts
+<details>
+<summary>Código final de <code>package.json</code> (el único archivo que cambió después de crearlo)</summary>
 
-git commit -m "test: add quality strategy and automated suites"
-```
+   ```json
+   {
+     "name": "lab07-pruebas",
+     "private": true,
+     "version": "0.0.0",
+     "type": "module",
+     "scripts": {
+       "dev": "vite",
+       "build": "vite build",
+       "preview": "vite preview --host 127.0.0.1 --port 4177 --strictPort",
+       "test": "vitest",
+       "test:run": "vitest run",
+       "test:coverage": "vitest run --coverage",
+       "cy:run": "cypress run --browser chrome",
+       "e2e": "npm run build && start-server-and-test preview http://127.0.0.1:4177 cy:run"
+     },
+     "dependencies": {
+       "vue": "^3.5.13"
+     },
+     "devDependencies": {
+       "@vitejs/plugin-vue": "^5.2.2",
+       "@vitest/coverage-v8": "3.2.4",
+       "@vue/test-utils": "2.4.6",
+       "cypress": "14.5.4",
+       "jsdom": "26.1.0",
+       "start-server-and-test": "2.0.12",
+       "vite": "^6.3.1",
+       "vitest": "3.2.4"
+     }
+   }
+   ```
 
-> Si usas pnpm, confirma `pnpm-lock.yaml` en lugar de `package-lock.json`.
+Los demás archivos se escriben una sola vez y completos: el bloque de cada paso ya es su versión final. En `solucion/` también está el `README.md` en inglés que crea la plantilla de Vite; la guía no lo toca.
 
-**Resultado esperado:**
+</details>
 
-El repositorio contiene estrategia documentada, configuración de Vitest, cobertura, pruebas unitarias, pruebas de componentes, fixtures y pruebas E2E reproducibles.
+## Problemas frecuentes
 
-**Verificación:**
-
-Ejecuta:
-
-```bash
-git log --oneline -2
-```
-
-Debes observar un commit con un mensaje equivalente a:
-
-```text
-test: add quality strategy and automated suites
-```
-
----
-
-## Validación y pruebas
-
-Completa esta lista antes de considerar finalizado el laboratorio:
-
-| Validación | Comando o evidencia | Resultado esperado |
+| Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
-| Rama correcta | `git branch --show-current` | `main` |
-| Estrategia documentada | `cat docs/test-strategy.md` | Pirámide, riesgos, exclusiones y mantenimiento. |
-| Vitest configurado | `npm run test:run` | Suites unitarias y de componentes verdes. |
-| Cobertura V8 | `npm run test:coverage` | Reporte en `coverage/` y umbrales cumplidos. |
-| Prueba de filtros | Suite `useProductFilters.test.ts` | Filtra y reinicia correctamente. |
-| Prueba de caché | Suite `productCache.test.ts` | Respeta TTL y claves inexistentes. |
-| Prueba de virtualización | Suite `visibleRange.test.ts` | Limita rangos correctamente. |
-| Pruebas de componentes | Suites de `ProductRow`, `ProductFilters` y lista virtualizada | Props, eventos y estado vacío correctos. |
-| Cypress | `npm run e2e` | Tres flujos E2E aprobados. |
-| Sin esperas fijas | Revisión de `cypress/e2e/catalog.cy.ts` | No usa `cy.wait(numero)`. |
-| Puerto reservado | Revisión de procesos | No hay servicio iniciado en el puerto 3000. |
-
-Para comprobar los puertos activos en sistemas Unix:
-
-```bash
-lsof -i :4173 -i :5173 -i :3000
-```
-
-Para Windows PowerShell:
-
-```powershell
-netstat -ano | findstr ":4173 :5173 :3000"
-```
-
-## Solución de problemas
-
-### 1. Vitest muestra `ReferenceError: document is not defined` o falla al montar componentes Vue
-
-**Síntoma:** al ejecutar `npm run test:run`, las pruebas de componentes fallan al acceder a `document`, `window` o métodos de Vue Test Utils.
-
-**Causa:** Vitest está usando el entorno predeterminado de Node en lugar de `jsdom`, o el archivo de configuración no está siendo interpretado por Vitest.
-
-**Solución:**
-
-1. Confirma que `vite.config.ts` importa desde `vitest/config`.
-
-```ts
-import { defineConfig } from 'vitest/config'
-```
-
-2. Confirma que existe esta configuración:
-
-```ts
-test: {
-  environment: 'jsdom',
-  setupFiles: ['./src/test/setupTests.ts'],
-}
-```
-
-3. Verifica que `jsdom` esté instalado.
-
-```bash
-npm ls jsdom
-```
-
-4. Reinstala dependencias si es necesario.
-
-```bash
-rm -rf node_modules package-lock.json
-npm install
-```
-
-5. Ejecuta nuevamente:
-
-```bash
-npm run test:run
-```
-
-### 2. Cypress falla esperando `@getProducts` o intenta consultar una API real
-
-**Síntoma:** Cypress muestra un error de timeout en `cy.wait('@getProducts')`, recibe una respuesta `404` o intenta conectarse a un servicio externo.
-
-**Causa:** el patrón de `cy.intercept()` no coincide con la URL real usada por la aplicación, o la aplicación consulta GraphQL en lugar de REST.
-
-**Solución:**
-
-1. Inicia la aplicación en modo desarrollo.
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-2. Abre las herramientas de desarrollo del navegador y revisa la pestaña **Network** al cargar el catálogo.
-
-3. Ajusta el patrón de Cypress a la URL observada. Para REST:
-
-```ts
-cy.intercept('GET', '**/api/products*', { fixture: 'products.json' }).as(
-  'getProducts',
-)
-```
-
-4. Si usa GraphQL, intercepta el endpoint correspondiente:
-
-```ts
-cy.intercept('POST', '**/graphql', {
-  statusCode: 200,
-  body: {
-    data: {
-      products: [],
-    },
-  },
-}).as('getProducts')
-```
-
-5. Detén el servidor de desarrollo y vuelve a ejecutar la suite oficial:
-
-```bash
-npm run e2e
-```
+| El creador pregunta `Select a framework` y no crea nada | Se usó `npm create vite@6.4.1 lab07-pruebas -- --template vue` en PowerShell, que se come el `--` | Pulsa `Ctrl + C` y usa el comando de la guía: `npx --yes create-vite@6.4.1 lab07-pruebas --template vue` |
+| La terminal muestra `Local: http://localhost:5173/` y no 5177 | Se usó `npm run dev -- --port 5177` en PowerShell, que se come el `--` | Detén el servidor con `Ctrl + C` y usa `npx vite --port 5177` |
+| `ReferenceError: document is not defined` | Vitest corre sin jsdom | Revisa que `vite.config.js` importe `defineConfig` de `vitest/config` y tenga `environment: 'jsdom'` |
+| `Failed to resolve import "./components/HelloWorld.vue"` | Borraste `HelloWorld.vue` antes de reemplazar `App.vue` | Reemplaza `src/App.vue` con el del paso 5 |
+| `ERROR: Coverage for lines (...)` o `for functions (75%) does not meet global threshold (80%)` | Hay código que ninguna prueba ejecuta: `HelloWorld.vue` sin borrar, o falta la prueba del favorito en `App.test.js` y `alternar` nunca corre | Abre `coverage/index.html`, mira qué archivo baja el promedio y pruébalo o bórralo si sobra |
+| `No version of Cypress is installed` o `the Cypress binary is missing` | La descarga de Cypress no terminó o npm no la ejecutó al instalar | Ejecuta `npx cypress install` y repite `npm run e2e` |
+| `Browser: chrome was not found on your system` | Chrome no está instalado | Instálalo, o quita `--browser chrome` del script `cy:run` para usar el navegador de Cypress |
+| `cy.wait() timed out waiting ... for the 1st request to the route: productos` | La dirección interceptada no coincide con la real | Corre el opcional `npx cypress open` y mira la petición en el panel de comandos, o abre `npm run preview` en Chrome con `F12`, pestaña **Network** (Red), y compara la dirección con `**/api/productos.json` |
+| `Port 4177 is already in use` | Quedó abierto un `preview` | Ciérralo con `Ctrl + C` en su terminal y repite |
 
 ## Limpieza
 
-1. Detén cualquier proceso de Vite o Cypress que permanezca activo con `Ctrl+C`.
+- Detén con `Ctrl + C` cualquier `npx vite`, `npm test` o `npm run preview` que siga abierto. `npm run e2e` apaga solo su servidor.
+- Para recuperar espacio, borra la carpeta `coverage` (y `node_modules` si no vas a volver al proyecto). El capítulo 8 arranca en otra carpeta vacía y trae su propio código.
 
-2. No elimines las dependencias, fixtures, reportes ni configuración de pruebas: serán necesarios en el laboratorio `08-00-01`.
+## Ejercicios de reserva
 
-3. Si deseas eliminar únicamente artefactos regenerables de cobertura:
+**Básico.** Agrega a `filtrarProductos.test.js` un caso que compruebe que `'  monitor  '`, con espacios alrededor, encuentra solo el producto 3.
 
-```bash
-rm -rf coverage
+<details>
+<summary>Solución</summary>
+
+```js
+it('ignora los espacios alrededor del texto', () => {               // otro caso borde
+  expect(filtrarProductos(productos, '  monitor  ').map((p) => p.id)).toEqual([3]) // solo el Monitor
+})
 ```
 
-4. Verifica el estado final del repositorio.
+</details>
 
-```bash
-git status
+**Medio.** Prueba que la tarjeta marcada como favorito anuncia al lector de pantalla "Quitar de favoritos: Teclado".
+
+<details>
+<summary>Solución</summary>
+
+```js
+it('anuncia la acción correcta al lector de pantalla', () => {
+  const boton = montar({ favorito: true }).get('button')                     // tarjeta marcada
+  expect(boton.attributes('aria-label')).toBe('Quitar de favoritos: Teclado') // texto que se oye
+})
 ```
 
-El resultado esperado es:
+</details>
 
-```text
-nothing to commit, working tree clean
+**Avanzado.** Agrega una E2E que escriba "zzz" y compruebe el mensaje "No hay productos con ese nombre.". Agrega primero `data-cy="vacio"` a ese párrafo en `App.vue`.
+
+<details>
+<summary>Solución</summary>
+
+```js
+it('avisa cuando ningún producto coincide', () => {
+  abrirCatalogo({ fixture: 'productos.json' })                     // mismos datos fijos
+  cy.get('[data-cy="buscar"]').type('zzz')                         // texto que nadie tiene
+  cy.get('[data-cy="tarjeta"]').should('not.exist')                // no queda ninguna tarjeta
+  cy.get('[data-cy="vacio"]').should('have.text', 'No hay productos con ese nombre.')
+})
 ```
 
-5. Confirma que no se dejó ningún servicio en el puerto reservado `3000`.
+</details>
 
-```bash
-lsof -i :3000
-```
+## Recursos
 
-La salida debe estar vacía.
+- [Guía de inicio de Vitest](https://vitest.dev/guide/): instalación y primera prueba.
+- [Cobertura en Vitest](https://vitest.dev/guide/coverage.html): proveedor V8, umbrales y reportes.
+- [Vue Test Utils](https://test-utils.vuejs.org/): montar y revisar componentes.
+- [Documentación de Cypress](https://docs.cypress.io/): `cy.intercept`, fixtures y depuración.
+- [Pruebas en Vue](https://vuejs.org/guide/scaling-up/testing.html): qué nivel usar para cada cosa.
 
-## Resumen
+## Control de cambios
 
-En este laboratorio creaste una estrategia de calidad escalable para Catalogo Pro. Documentaste riesgos y niveles de prueba, configuraste Vitest con `jsdom` y cobertura V8, y construiste pruebas unitarias para lógica de filtros, caché y virtualización.
-
-También validaste contratos de componentes con Vue Test Utils y automatizaste con Cypress los flujos críticos de catálogo, filtrado, detalle lazy-loaded, preservación de filtros y favoritos. Esta base será utilizada en el siguiente laboratorio para integrar la aplicación en un monorepo y ejecutar estas validaciones dentro de un pipeline CI/CD.
-
-### Recursos opcionales
-
-- [Documentación de Vitest](https://vitest.dev/)
-- [Vue Test Utils](https://test-utils.vuejs.org/)
-- [Documentación de Cypress](https://docs.cypress.io/)
-- [Cobertura V8 en Vitest](https://vitest.dev/guide/coverage.html)
-- [Guía de pruebas de Vue](https://vuejs.org/guide/scaling-up/testing.html)
+| Versión | Fecha | Autor | Cambio |
+|---|---|---|---|
+| 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita para construir desde una carpeta vacía con Vite 6.4: estrategia de pruebas, Vitest, Vue Test Utils y Cypress con todo el código en la guía |
+| 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI (interfaz de línea de comandos) en Windows 11 (PowerShell) y Linux: proyecto con `npx --yes create-vite@6.4.1`, servidor con `npx vite --port 5177` y `preview` en el puerto propio 4177; `npx cypress install` explícito; prueba nueva del favorito en `App.test.js` (sin ella la cobertura de funciones quedaba en 75 %); borrado de `HelloWorld.vue` igual en los tres sistemas; mensaje real de Vitest en el paso 3; conceptos `enableAutoUnmount`, `mockResolvedValue`, `mockRejectedValue`, `toHaveBeenCalledOnce` y `start-server-and-test`; tiempos 3 y 10 minutos en los pasos 1 y 5; el capítulo 8 ya no depende de este proyecto |
