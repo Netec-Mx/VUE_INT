@@ -1,1330 +1,652 @@
-# 4 Practica: implementar flujo de autenticación con rutas protegidas y carga dinámica
-
-## Metadatos
+# Práctica 3.4: flujo de autenticación con rutas protegidas y carga dinámica
 
 | Campo | Valor |
 |---|---|
 | Duración | 46 minutos |
-| Complejidad | Difícil |
+| Complejidad | Media |
 | Nivel de Bloom | Aplicar |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio ampliarás la SPA **ProjectHub** con una navegación estructurada mediante Vue Router 4. Implementarás autenticación simulada con MSW, rutas anidadas protegidas, autorización por roles y carga perezosa de vistas mediante `import()` dinámico.
+ProjectHub gana una sesión simulada, rutas por rol y vistas que se descargan solo cuando alguien las pide. Construyes desde una carpeta vacía el mapa de rutas de una SPA (aplicación de una sola página): un área de trabajo con rutas anidadas, una guardia que exige sesión y rol antes de entrar, carga perezosa de las vistas y una pantalla de rescate cuando falla la descarga de una de ellas.
 
-El resultado será una aplicación con acceso público a `/login`, un área protegida bajo `/app`, una vista administrativa restringida y una estrategia de recuperación ante errores de carga de chunks.
+**Objetivo:** configurar rutas públicas, protegidas, anidadas y de captura global con Vue Router 4.
 
-## Objetivos de aprendizaje
-
-Al completar este laboratorio, podrás:
-
-- [ ] Configurar rutas públicas, protegidas, anidadas y de captura global con Vue Router.
-- [ ] Implementar autenticación simulada contra `POST /api/auth/login` usando MSW.
-- [ ] Aplicar `meta.requiresAuth`, `meta.roles` y guards globales de navegación.
-- [ ] Cargar bajo demanda las vistas Dashboard, Projects, TaskDetail y Admin.
-- [ ] Gestionar rutas no encontradas, accesos prohibidos y errores `ChunkLoadError`.
-
-## Prerrequisitos
-
-### Conocimientos requeridos
-
-- Laboratorio `02-00-01` completado, con composables y contexto funcional de ProjectHub.
-- Uso básico de Vue 3 con Composition API y `<script setup>`.
-- Promesas, `async/await`, `try/catch` y solicitudes HTTP con `fetch`.
-- Fundamentos de Vue Router: `RouterLink`, `RouterView`, rutas nombradas y parámetros dinámicos.
-- Conocimiento básico de MSW en el navegador.
-
-### Acceso y condiciones técnicas
-
-- Directorio de trabajo obligatorio:
-  - Linux/macOS: `..`
-  - Windows: `C:\workspace\vue-intermedio-labs`
-- Aplicación existente con nombre fijo: `projecthub-spa`.
-- Rama Git activa: `main`.
-- Google Chrome instalado para verificar la SPA.
-- Puerto Vite disponible: `5173`.
-- No iniciar ningún servicio en el puerto `3000`.
-
-## Entorno del laboratorio
-
-### Software principal
-
-| Herramienta | Versión esperada |
-|---|---:|
-| Node.js | 22.14.0 |
-| npm | 10.9.2 |
-| Vue | 3.5.13 |
-| Vite | 6.1.0 |
-| Vue Router | 4.5.0 |
-| MSW | 2.7.3 |
-| Google Chrome | 133.0.6943.98 o superior |
-
-### Preparación inicial
-
-1. Abre una terminal.
-2. Accede al proyecto existente.
-3. Comprueba la rama activa y las dependencias.
-
-```bash
-cd ../projecthub-spa
-git branch --show-current
-node --version
-npm --version
-npm install
-```
-
-En Windows PowerShell:
-
-```powershell
-cd C:\workspace\vue-intermedio-labs\projecthub-spa
-git branch --show-current
-node --version
-npm --version
-npm install
-```
-
-La rama mostrada debe ser `main`.
-
-Si Vue Router o MSW no están disponibles en el proyecto, instálalos respetando las versiones del curso:
-
-```bash
-npm install vue-router@4.5.0 msw@2.7.3
-```
-
-Genera o actualiza el Service Worker de MSW en `public/`:
-
-```bash
-npx msw@2.7.3 init public/ --save
-```
-
-### Estructura objetivo
-
-Al finalizar, los archivos relevantes deberán tener una estructura similar a esta:
+Así se ve al final, con sesión de administradora:
 
 ```text
-src/
-├── App.vue
-├── main.js
-├── composables/
-│   ├── useAsyncState.js
-│   └── useAuthSession.js
-├── mocks/
-│   ├── browser.js
-│   └── handlers.js
-├── router/
-│   └── index.js
-└── views/
-    ├── AdminView.vue
-    ├── ChunkRecoveryView.vue
-    ├── DashboardView.vue
-    ├── ForbiddenView.vue
-    ├── LoginView.vue
-    ├── NotFoundView.vue
-    ├── ProjectsView.vue
-    ├── TaskDetailView.vue
-    └── ProjectHubLayout.vue
+ProjectHub - Ada (admin) [Cerrar sesión]
+Tablero | Proyectos | Tarea 202 | Administración
+------------------------------------------------
+Detalle de tarea
+Tarea recibida desde la dirección: task-202
 ```
 
-## Procedimiento paso a paso
+## Conceptos que usas
 
-### Paso 1. Preparar el punto de entrada y el componente raíz
+Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vue Router es la única herramienta nueva.
 
-**Objetivo:** Instalar Vue Router en la aplicación y garantizar que MSW se inicialice exclusivamente durante el desarrollo.
+| Concepto | Dónde lo viste |
+|---|---|
+| Composable con estado compartido fuera de la función (repaso) | Capítulo 2, 2.1 y 2.2 |
+| `ref` y `computed` | Capítulo 1 |
+| Tabla de rutas, rutas anidadas y `RouterView` dentro del padre | 3.1 |
+| Navegar por nombre, parámetros (`:taskId`), `props: true` y ruta comodín | 3.1 |
+| `meta`, guardia global `beforeEach` y `?redirect=` | 3.2 |
+| `() => import()`, precarga y `router.onError` | 3.3 |
+| `afterEach` y fallas de navegación (`failure`) | 3.2 y 3.3 |
 
-**Instrucciones:**
+## Antes de empezar
 
-1. Crea el directorio del router si todavía no existe:
+- **Node.js 20 o 22**, la versión que pide la SUG (Setup Guide, guía de instalación de Netec). Compruébalo con `node -v`.
+- Google Chrome y Visual Studio Code con la extensión **Vue (Official)**.
+- Conexión a internet para que `npm` descargue las librerías.
+
+## Preparación (6 minutos)
+
+1. Crea una carpeta para tus prácticas (por ejemplo `labs-vue`), abre una terminal dentro de ella y crea el proyecto con Vite 6.4. El comando es igual en Windows, macOS y Linux:
 
    ```bash
-   mkdir -p src/router src/mocks src/composables src/views
+   npx --yes create-vite@6.4 projecthub-router --template vue
+   cd projecthub-router
+   npm install
+   npm install vue-router@4.6
+   code .
    ```
 
-2. Actualiza `src/App.vue` para que actúe como contenedor raíz de Vue Router.
+   `create-vite` crea la carpeta `projecthub-router` con un proyecto de Vue listo; `npm install` baja las librerías y `vue-router@4.6` agrega el enrutador. `code .` abre la carpeta en VS Code.
+
+2. Arranca el servidor de desarrollo y deja esa terminal abierta:
+
+   ```bash
+   npm run dev
+   ```
+
+**Qué debes ver:** la terminal muestra `Local: http://localhost:5173/`. Ábrelo en Chrome: aparece la página de ejemplo "Vite + Vue". Si la terminal muestra otro puerto, usa ese en todo el laboratorio.
+
+## Paso 1. El mapa de rutas anidadas (13 minutos)
+
+**Qué vas a hacer y por qué:** una tabla de rutas le dice al enrutador qué componente dibujar para cada dirección. `/app` será la ruta padre: dibuja el menú y, dentro de su propio `RouterView`, la vista hija que pida la dirección.
+
+1. **Repaso del capítulo 2.** Crea `src/sesion.js`. Es un composable como los del capítulo 2, con el estado fuera de la función para que toda la aplicación comparta una sola sesión. En este paso todavía nadie la usa para proteger nada:
+
+   ```js
+   import { ref, computed } from 'vue'                          // estado reactivo y valores calculados
+
+   const cuentas = {                                            // cuentas de prueba: correo -> datos del usuario
+     'user@projecthub.dev': { nombre: 'Úrsula', rol: 'user' },
+     'admin@projecthub.dev': { nombre: 'Ada', rol: 'admin' },
+   }
+   const usuario = ref(null)                                    // fuera de la función: una sola sesión para toda la app
+   const conectado = computed(() => usuario.value !== null)     // true cuando alguien inició sesión
+
+   async function entrar(correo) {                              // simula la llamada al servidor de autenticación
+     await new Promise((listo) => setTimeout(listo, 300))       // espera 300 ms, como haría la red
+     if (!cuentas[correo]) throw new Error('Ese correo no está registrado.') // la vista muestra este mensaje
+     usuario.value = cuentas[correo]                            // guarda quién entró
+   }
+
+   function salir() {                                           // cierra la sesión
+     usuario.value = null                                       // sin usuario, la guardia vuelve a pedir ingreso
+   }
+
+   export function useSesion() {                                // el composable entrega el estado y las acciones
+     return { usuario, conectado, entrar, salir }
+   }
+   ```
+
+2. Crea la carpeta `src/views` y, dentro, `ProjectHubLayout.vue`, el marco del área de trabajo:
 
    ```vue
    <script setup>
-   import { RouterView } from 'vue-router'
+   import { useRouter } from 'vue-router'          // para navegar desde el código
+   import { useSesion } from '../sesion'           // el composable de sesión
+
+   const router = useRouter()                      // el enrutador de la aplicación
+   const { usuario, salir } = useSesion()          // quién está dentro y cómo salir
+
+   function cerrarSesion() {                       // acción del botón Cerrar sesión
+     salir()                                       // borra el usuario
+     router.push({ name: 'login' })                // navega por nombre, no por dirección
+   }
    </script>
 
    <template>
+     <header>
+       <strong>ProjectHub</strong>
+       <!-- Solo se muestra cuando alguien inició sesión -->
+       <span v-if="usuario"> - {{ usuario.nombre }} ({{ usuario.rol }})
+         <button type="button" @click="cerrarSesion">Cerrar sesión</button>
+       </span>
+     </header>
+     <nav aria-label="Navegación principal">
+       <!-- Cada enlace apunta a una ruta por su nombre -->
+       <RouterLink :to="{ name: 'dashboard' }">Tablero</RouterLink> |
+       <RouterLink :to="{ name: 'projects' }">Proyectos</RouterLink> |
+       <RouterLink :to="{ name: 'task-detail', params: { taskId: 'task-202' } }">Tarea 202</RouterLink>
+       <!-- Ocultar el enlace es comodidad; la que protege /admin es la guardia -->
+       <span v-if="usuario?.rol === 'admin'"> | <RouterLink :to="{ name: 'admin' }">Administración</RouterLink></span>
+     </nav>
+     <main>
+       <!-- RouterView anidado: aquí se dibujan las rutas hijas de /app -->
+       <RouterView />
+     </main>
+   </template>
+   ```
+
+3. En `src/views`, crea estas cuatro vistas. **Cópialas tal cual: son de apoyo, no son el tema de hoy.** Solo fíjate en que `TaskDetailView` recibe `taskId` como prop.
+
+   `DashboardView.vue`:
+
+   ```vue
+   <template>
+     <h2>Tablero</h2>
+     <p>Resumen de actividad: 2 proyectos y 5 tareas abiertas.</p>
+   </template>
+   ```
+
+   `ProjectsView.vue`:
+
+   ```vue
+   <template>
+     <h2>Proyectos</h2>
+     <ul>
+       <li>Modernización de ProjectHub</li>
+       <li>Automatización de calidad</li>
+     </ul>
+   </template>
+   ```
+
+   `TaskDetailView.vue`:
+
+   ```vue
+   <script setup>
+   defineProps({ taskId: { type: String, required: true } }) // llega desde :taskId gracias a props: true
+   </script>
+
+   <template>
+     <h2>Detalle de tarea</h2>
+     <p>Tarea recibida desde la dirección: <strong>{{ taskId }}</strong></p>
+   </template>
+   ```
+
+   `NotFoundView.vue`:
+
+   ```vue
+   <template>
+     <main>
+       <h1>Página no encontrada</h1>
+       <p>Esa dirección no existe en ProjectHub.</p>
+       <RouterLink :to="{ name: 'dashboard' }">Ir al tablero</RouterLink>
+     </main>
+   </template>
+   ```
+
+4. Crea `src/router.js`, la tabla de rutas:
+
+   ```js
+   import { createRouter, createWebHistory } from 'vue-router'    // funciones para crear el enrutador
+   import ProjectHubLayout from './views/ProjectHubLayout.vue'     // marco con el menú del área de trabajo
+   import NotFoundView from './views/NotFoundView.vue'             // página para direcciones que no existen
+   import DashboardView from './views/DashboardView.vue'           // vista del tablero
+   import ProjectsView from './views/ProjectsView.vue'             // vista de proyectos
+   import TaskDetailView from './views/TaskDetailView.vue'         // vista de detalle de una tarea
+
+   const routes = [                                                // la tabla: dirección -> componente
+     { path: '/', redirect: { name: 'dashboard' } },               // la raíz lleva al tablero, por nombre
+     {
+       path: '/app',                                               // ruta padre del área de trabajo
+       component: ProjectHubLayout,                                // su RouterView dibuja a los hijos
+       children: [                                                 // hijas: /app/dashboard, /app/projects...
+         { path: 'dashboard', name: 'dashboard', component: DashboardView },
+         { path: 'projects', name: 'projects', component: ProjectsView },
+         { path: 'tasks/:taskId', name: 'task-detail', component: TaskDetailView, props: true }, // :taskId llega como prop
+       ],
+     },
+     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView }, // comodín: siempre de último
+   ]
+
+   const router = createRouter({ history: createWebHistory(), routes }) // direcciones limpias, sin #
+
+   export default router                                           // main.js lo conecta a la aplicación
+   ```
+
+5. Reemplaza todo `src/main.js` y todo `src/App.vue`.
+
+   `src/main.js`:
+
+   ```js
+   import { createApp } from 'vue'          // crea la aplicación de Vue
+   import './style.css'                     // estilos que trae la plantilla de Vite
+   import App from './App.vue'              // componente raíz
+   import router from './router'            // nuestro enrutador (src/router.js)
+
+   createApp(App).use(router).mount('#app') // conecta el enrutador y monta la aplicación
+   ```
+
+   `src/App.vue`:
+
+   ```vue
+   <template>
+     <!-- RouterView raíz: aquí el enrutador dibuja la pantalla de la ruta actual -->
      <RouterView />
    </template>
    ```
 
-3. Actualiza `src/main.js`. MSW se cargará dinámicamente solo si Vite se ejecuta en modo desarrollo.
+6. En el explorador de VS Code, borra las carpetas `src/components` y `src/assets`: eran de la página de ejemplo y ya nadie las importa.
 
-   ```js
-   import { createApp } from 'vue'
-   import App from './App.vue'
-   import router from './router'
+**Primero, predice:** al abrir `http://localhost:5173/`, ¿en qué dirección terminas y qué partes ves?
 
-   async function bootstrap() {
-     if (import.meta.env.DEV) {
-       const { worker } = await import('./mocks/browser')
+**Qué debes ver:** la dirección cambia a `/app/dashboard` y se ven el menú y "Tablero". Pulsa **Tarea 202**: la dirección es `/app/tasks/task-202` y la vista muestra `task-202`. Escribe en la barra `/app/tasks/abc`: muestra `abc`. Escribe `/no-existe`: "Página no encontrada".
 
-       await worker.start({
-         onUnhandledRequest: 'bypass'
-       })
-     }
+## Paso 2. Sesión, meta y guardia (11 minutos)
 
-     createApp(App)
-       .use(router)
-       .mount('#app')
-   }
+**Qué vas a hacer y por qué:** hoy cualquiera entra a `/app`. Cada ruta va a declarar en `meta` lo que exige, y una sola guardia `beforeEach` lo aplicará antes de dibujar nada.
 
-   bootstrap()
-   ```
-
-4. Verifica que exista el archivo `public/mockServiceWorker.js`.
-
-   ```bash
-   ls public/mockServiceWorker.js
-   ```
-
-   En Windows PowerShell:
-
-   ```powershell
-   Get-Item public\mockServiceWorker.js
-   ```
-
-**Resultado esperado:**
-
-- `App.vue` contiene un único `<RouterView />`.
-- `main.js` registra Vue Router con `.use(router)`.
-- MSW solamente se inicia cuando `import.meta.env.DEV` es verdadero.
-- El archivo `public/mockServiceWorker.js` existe.
-
-**Verificación:**
-
-Ejecuta temporalmente la aplicación:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-Abre `http://127.0.0.1:5173`. Es normal observar un error de compilación temporal hasta crear `src/router/index.js` en el siguiente paso. Detén el servidor con `Ctrl+C`.
-
----
-
-### Paso 2. Crear los composables de operación asíncrona y sesión
-
-**Objetivo:** Centralizar el estado de carga, error y autenticación simulada mediante composables reutilizables.
-
-**Instrucciones:**
-
-1. Crea o actualiza `src/composables/useAsyncState.js`.
-
-   ```js
-   import { ref } from 'vue'
-
-   export function useAsyncState() {
-     const isLoading = ref(false)
-     const error = ref(null)
-
-     async function execute(operation) {
-       isLoading.value = true
-       error.value = null
-
-       try {
-         return await operation()
-       } catch (currentError) {
-         error.value = currentError
-         throw currentError
-       } finally {
-         isLoading.value = false
-       }
-     }
-
-     return {
-       isLoading,
-       error,
-       execute
-     }
-   }
-   ```
-
-2. Crea `src/composables/useAuthSession.js`.
-
-   Este composable mantiene un estado de sesión único a nivel de módulo durante la ejecución de la SPA. No se persiste todavía en `localStorage`, ya que la persistencia y la migración a Pinia se realizarán en el laboratorio `04-00-01`.
-
-   ```js
-   import { computed, readonly, ref } from 'vue'
-   import { useAsyncState } from './useAsyncState'
-
-   const API_URL = 'http://127.0.0.1:5173/api'
-
-   const currentUser = ref(null)
-   const { isLoading, error, execute } = useAsyncState()
-
-   const isAuthenticated = computed(() => currentUser.value !== null)
-
-   const roles = computed(() => currentUser.value?.roles ?? [])
-
-   async function login(credentials) {
-     const response = await execute(async () => {
-       const request = await fetch(`${API_URL}/auth/login`, {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json'
-         },
-         body: JSON.stringify(credentials)
-       })
-
-       const payload = await request.json()
-
-       if (!request.ok) {
-         throw new Error(payload.message ?? 'No fue posible iniciar sesión.')
-       }
-
-       return payload
-     })
-
-     currentUser.value = response.user
-
-     return response.user
-   }
-
-   function logout() {
-     currentUser.value = null
-   }
-
-   function hasAnyRole(requiredRoles = []) {
-     if (requiredRoles.length === 0) {
-       return true
-     }
-
-     return requiredRoles.some((role) => roles.value.includes(role))
-   }
-
-   export function useAuthSession() {
-     return {
-       currentUser: readonly(currentUser),
-       isAuthenticated,
-       roles,
-       isLoading,
-       error: readonly(error),
-       login,
-       logout,
-       hasAnyRole
-     }
-   }
-   ```
-
-3. Revisa los aspectos importantes de la implementación:
-
-   - `currentUser` está definido fuera de `useAuthSession()`, por lo que todas las vistas y guards comparten la misma sesión.
-   - `useAsyncState()` controla `isLoading` y `error`.
-   - La autenticación se comunica con el endpoint constante `http://127.0.0.1:5173/api/auth/login`.
-   - El método `hasAnyRole()` permite evaluar los roles definidos en los metadatos de rutas.
-   - No se usa Pinia en este laboratorio.
-
-**Resultado esperado:**
-
-Dispones de un composable genérico para tareas asíncronas y otro composable específico para sesión simulada.
-
-**Verificación:**
-
-Comprueba que los archivos existen:
-
-```bash
-find src/composables -maxdepth 1 -type f
-```
-
-Debes observar al menos:
-
-```text
-src/composables/useAsyncState.js
-src/composables/useAuthSession.js
-```
-
----
-
-### Paso 3. Configurar el endpoint de autenticación con MSW
-
-**Objetivo:** Simular el endpoint REST `POST /api/auth/login` sin iniciar una API real ni utilizar el puerto 3000.
-
-**Instrucciones:**
-
-1. Crea o actualiza `src/mocks/handlers.js`.
-
-   ```js
-   import { http, HttpResponse } from 'msw'
-
-   const API_URL = 'http://127.0.0.1:5173/api'
-
-   export const handlers = [
-     http.post(`${API_URL}/auth/login`, async ({ request }) => {
-       const { email, password } = await request.json()
-
-       if (password !== 'projecthub123') {
-         return HttpResponse.json(
-           {
-             message: 'Credenciales inválidas.'
-           },
-           {
-             status: 401
-           }
-         )
-       }
-
-       if (email === 'admin@projecthub.dev') {
-         return HttpResponse.json({
-           user: {
-             id: 'admin-01',
-             name: 'Ada Administradora',
-             email,
-             roles: ['admin', 'user']
-           }
-         })
-       }
-
-       if (email === 'user@projecthub.dev') {
-         return HttpResponse.json({
-           user: {
-             id: 'user-01',
-             name: 'Ursula Usuario',
-             email,
-             roles: ['user']
-           }
-         })
-       }
-
-       return HttpResponse.json(
-         {
-           message: 'El usuario no está registrado en el entorno simulado.'
-         },
-         {
-           status: 401
-         }
-       )
-     })
-   ]
-   ```
-
-2. Crea o actualiza `src/mocks/browser.js`.
-
-   ```js
-   import { setupWorker } from 'msw/browser'
-   import { handlers } from './handlers'
-
-   export const worker = setupWorker(...handlers)
-   ```
-
-3. Conserva las siguientes credenciales de prueba:
-
-   | Tipo de usuario | Correo | Contraseña | Roles |
-   |---|---|---|---|
-   | Usuario estándar | `user@projecthub.dev` | `projecthub123` | `user` |
-   | Administrador | `admin@projecthub.dev` | `projecthub123` | `admin`, `user` |
-   | Error esperado | cualquier otro correo o contraseña | cualquiera no válida | Ninguno |
-
-4. No cambies el endpoint para usar el puerto `3000`. MSW interceptará la solicitud en el navegador antes de que alcance una API real.
-
-**Resultado esperado:**
-
-- MSW intercepta `POST http://127.0.0.1:5173/api/auth/login`.
-- Los dos usuarios definidos generan respuestas exitosas.
-- Una contraseña incorrecta responde con estado HTTP `401`.
-
-**Verificación:**
-
-Inicia la aplicación:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-Abre Chrome en `http://127.0.0.1:5173` y revisa la consola de desarrollo. Debe aparecer un mensaje equivalente a:
-
-```text
-[MSW] Mocking enabled.
-```
-
-Detén el servidor con `Ctrl+C` antes de continuar si deseas editar sin salida de consola adicional.
-
----
-
-### Paso 4. Definir rutas, metadatos, guards y recuperación de chunks
-
-**Objetivo:** Crear la configuración central de Vue Router con rutas protegidas, autorización por roles, lazy loading, telemetría y manejo de `ChunkLoadError`.
-
-**Instrucciones:**
-
-1. Crea `src/router/index.js`.
-
-2. Agrega el siguiente contenido completo:
-
-   ```js
-   import { createRouter, createWebHistory } from 'vue-router'
-   import { useAuthSession } from '@/composables/useAuthSession'
-
-   import LoginView from '@/views/LoginView.vue'
-   import ForbiddenView from '@/views/ForbiddenView.vue'
-   import NotFoundView from '@/views/NotFoundView.vue'
-   import ChunkRecoveryView from '@/views/ChunkRecoveryView.vue'
-   import ProjectHubLayout from '@/views/ProjectHubLayout.vue'
-
-   const routes = [
-     {
-       path: '/',
-       redirect: {
-         name: 'dashboard'
-       }
-     },
-     {
-       path: '/login',
-       name: 'login',
-       component: LoginView,
-       meta: {
-         public: true
-       }
-     },
-     {
-       path: '/forbidden',
-       name: 'forbidden',
-       component: ForbiddenView,
-       meta: {
-         public: true
-       }
-     },
-     {
-       path: '/chunk-recovery',
-       name: 'chunk-recovery',
-       component: ChunkRecoveryView,
-       meta: {
-         public: true
-       }
-     },
-     {
-       path: '/app',
-       component: ProjectHubLayout,
-       meta: {
-         requiresAuth: true
-       },
-       children: [
-         {
-           path: '',
-           redirect: {
-             name: 'dashboard'
-           }
-         },
-         {
-           path: 'dashboard',
-           name: 'dashboard',
-           component: () => import('@/views/DashboardView.vue'),
-           meta: {
-             requiresAuth: true
-           }
-         },
-         {
-           path: 'projects',
-           name: 'projects',
-           component: () => import('@/views/ProjectsView.vue'),
-           meta: {
-             requiresAuth: true
-           }
-         },
-         {
-           path: 'tasks/:taskId',
-           name: 'task-detail',
-           component: () => import('@/views/TaskDetailView.vue'),
-           props: true,
-           meta: {
-             requiresAuth: true
-           }
-         }
-       ]
-     },
-     {
-       path: '/admin',
-       name: 'admin',
-       component: () => import('@/views/AdminView.vue'),
-       meta: {
-         requiresAuth: true,
-         roles: ['admin']
-       }
-     },
-     {
-       path: '/:pathMatch(.*)*',
-       name: 'not-found',
-       component: NotFoundView,
-       meta: {
-         public: true
-       }
-     }
-   ]
-
-   const router = createRouter({
-     history: createWebHistory(),
-     routes,
-     linkActiveClass: 'is-active',
-     linkExactActiveClass: 'is-exact-active',
-     scrollBehavior(to, from, savedPosition) {
-       if (savedPosition) {
-         return savedPosition
-       }
-
-       if (to.hash) {
-         return {
-           el: to.hash,
-           behavior: 'smooth'
-         }
-       }
-
-       return {
-         top: 0
-       }
-     }
-   })
-
-   router.beforeEach((to) => {
-     const auth = useAuthSession()
-
-     const requiresAuth = to.matched.some(
-       (routeRecord) => routeRecord.meta.requiresAuth
-     )
-
-     const requiredRoles = to.matched.flatMap(
-       (routeRecord) => routeRecord.meta.roles ?? []
-     )
-
-     if (requiresAuth && !auth.isAuthenticated.value) {
-       return {
-         name: 'login',
-         query: {
-           redirect: to.fullPath
-         }
-       }
-     }
-
-     if (
-       requiresAuth &&
-       requiredRoles.length > 0 &&
-       !auth.hasAnyRole(requiredRoles)
-     ) {
-       return {
-         name: 'forbidden',
-         query: {
-           redirect: to.fullPath
-         }
-       }
-     }
-
-     if (to.name === 'login' && auth.isAuthenticated.value) {
-       return {
-         name: 'dashboard'
-       }
-     }
-
-     return true
-   })
-
-   router.afterEach((to, from, failure) => {
-     const telemetry = {
-       event: 'navigation',
-       from: from.fullPath,
-       to: to.fullPath,
-       routeName: String(to.name ?? 'unnamed'),
-       status: failure ? 'failed' : 'completed',
-       timestamp: new Date().toISOString()
-     }
-
-     console.info('[ProjectHub telemetry]', telemetry)
-   })
-
-   router.onError((error, to) => {
-     const isChunkLoadError =
-       error.name === 'ChunkLoadError' ||
-       /Loading chunk .* failed|Failed to fetch dynamically imported module/i.test(
-         error.message
-       )
-
-     if (!isChunkLoadError || to.name === 'chunk-recovery') {
-       return
-     }
-
-     console.error('[ProjectHub] Error de carga dinámica:', error)
-
-     router.replace({
-       name: 'chunk-recovery',
-       query: {
-         target: to.fullPath
-       }
-     })
-   })
-
-   export default router
-   ```
-
-3. Confirma que las rutas protegidas usan `meta.requiresAuth`.
-
-4. Confirma que la ruta `/admin` usa:
-
-   ```js
-   meta: {
-     requiresAuth: true,
-     roles: ['admin']
-   }
-   ```
-
-5. Observa que las vistas siguientes se cargan mediante importación dinámica:
-
-   ```js
-   () => import('@/views/DashboardView.vue')
-   () => import('@/views/ProjectsView.vue')
-   () => import('@/views/TaskDetailView.vue')
-   () => import('@/views/AdminView.vue')
-   ```
-
-6. Observa que `/app` es una ruta padre. Por ello, `ProjectHubLayout.vue` deberá contener un `<RouterView />` para renderizar sus rutas hijas.
-
-**Resultado esperado:**
-
-La aplicación dispone de estas rutas:
-
-| URL | Nombre | Acceso |
-|---|---|---|
-| `/login` | `login` | Público |
-| `/forbidden` | `forbidden` | Público |
-| `/chunk-recovery` | `chunk-recovery` | Público |
-| `/app/dashboard` | `dashboard` | Usuario autenticado |
-| `/app/projects` | `projects` | Usuario autenticado |
-| `/app/tasks/:taskId` | `task-detail` | Usuario autenticado |
-| `/admin` | `admin` | Solo rol `admin` |
-| cualquier otra URL | `not-found` | Público |
-
-**Verificación:**
-
-Ejecuta el servidor:
-
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
-```
-
-Abre directamente:
-
-```text
-http://127.0.0.1:5173/app/dashboard
-```
-
-Debes ser redirigido a una URL equivalente a:
-
-```text
-http://127.0.0.1:5173/login?redirect=/app/dashboard
-```
-
-Aún no habrá una interfaz de login completa; se implementará en el siguiente paso.
-
----
-
-### Paso 5. Implementar layout y vistas de navegación
-
-**Objetivo:** Crear las vistas públicas, protegidas y de recuperación que consume el router.
-
-**Instrucciones:**
-
-1. Crea `src/views/ProjectHubLayout.vue`.
+1. Crea en `src/views` la pantalla de ingreso, `LoginView.vue`:
 
    ```vue
    <script setup>
-   import { RouterLink, RouterView, useRouter } from 'vue-router'
-   import { useAuthSession } from '@/composables/useAuthSession'
+   import { ref } from 'vue'                            // datos reactivos del formulario
+   import { useRoute, useRouter } from 'vue-router'     // la ruta actual y el enrutador
+   import { useSesion } from '../sesion'                // el composable de sesión
 
-   const router = useRouter()
-   const auth = useAuthSession()
+   const route = useRoute()                             // para leer ?redirect= de la dirección
+   const router = useRouter()                           // para navegar al terminar
+   const { entrar } = useSesion()                       // acción de iniciar sesión
+   const correo = ref('user@projecthub.dev')            // valor inicial para probar rápido
+   const error = ref('')                                // mensaje si el ingreso falla
 
-   function closeSession() {
-     auth.logout()
-     router.push({ name: 'login' })
-   }
-   </script>
-
-   <template>
-     <div class="projecthub-layout">
-       <header>
-         <div>
-           <p>ProjectHub</p>
-           <h1>Área de trabajo</h1>
-         </div>
-
-         <div>
-           <span>
-             Sesión: {{ auth.currentUser.value?.name }}
-           </span>
-
-           <button type="button" @click="closeSession">
-             Cerrar sesión
-           </button>
-         </div>
-       </header>
-
-       <nav aria-label="Navegación principal">
-         <RouterLink :to="{ name: 'dashboard' }">
-           Dashboard
-         </RouterLink>
-
-         <RouterLink :to="{ name: 'projects' }">
-           Proyectos
-         </RouterLink>
-
-         <RouterLink
-           :to="{ name: 'task-detail', params: { taskId: 'task-101' } }"
-         >
-           Tarea de ejemplo
-         </RouterLink>
-
-         <RouterLink
-           v-if="auth.roles.value.includes('admin')"
-           :to="{ name: 'admin' }"
-         >
-           Administración
-         </RouterLink>
-       </nav>
-
-       <main>
-         <RouterView />
-       </main>
-     </div>
-   </template>
-
-   <style scoped>
-   .projecthub-layout {
-     max-width: 960px;
-     margin: 0 auto;
-     padding: 2rem;
-     font-family: Arial, sans-serif;
-   }
-
-   header,
-   nav {
-     display: flex;
-     justify-content: space-between;
-     gap: 1rem;
-     align-items: center;
-   }
-
-   nav {
-     justify-content: flex-start;
-     flex-wrap: wrap;
-     margin: 1.5rem 0;
-   }
-
-   a {
-     color: #334155;
-   }
-
-   .is-active {
-     color: #1d4ed8;
-     font-weight: 700;
-   }
-
-   button {
-     cursor: pointer;
-   }
-   </style>
-   ```
-
-2. Crea `src/views/LoginView.vue`.
-
-   ```vue
-   <script setup>
-   import { computed, reactive } from 'vue'
-   import { useRoute, useRouter } from 'vue-router'
-   import { useAuthSession } from '@/composables/useAuthSession'
-
-   const router = useRouter()
-   const route = useRoute()
-   const auth = useAuthSession()
-
-   const form = reactive({
-     email: 'user@projecthub.dev',
-     password: 'projecthub123'
-   })
-
-   const redirectTarget = computed(() => {
-     const redirect = route.query.redirect
-
-     if (typeof redirect === 'string' && redirect.startsWith('/')) {
-       return redirect
-     }
-
-     return '/app/dashboard'
-   })
-
-   async function submitLogin() {
+   async function ingresar() {                          // se ejecuta al enviar el formulario
+     error.value = ''                                   // limpia el error anterior
      try {
-       await auth.login({
-         email: form.email,
-         password: form.password
-       })
-
-       await router.replace(redirectTarget.value)
-     } catch {
-       // El mensaje se muestra mediante auth.error.
+       await entrar(correo.value)                       // espera la respuesta simulada
+       await router.replace(route.query.redirect || { name: 'dashboard' }) // vuelve a donde iba; replace no deja el ingreso en el historial
+     } catch (e) {
+       error.value = e.message                          // muestra por qué falló
      }
    }
    </script>
 
    <template>
-     <main class="login-view">
-       <section>
-         <h1>Iniciar sesión en ProjectHub</h1>
-         <p>Usa una cuenta simulada para acceder al área de trabajo.</p>
-
-         <form @submit.prevent="submitLogin">
-           <label for="email">Correo electrónico</label>
-           <input
-             id="email"
-             v-model.trim="form.email"
-             type="email"
-             autocomplete="email"
-             required
-           >
-
-           <label for="password">Contraseña</label>
-           <input
-             id="password"
-             v-model="form.password"
-             type="password"
-             autocomplete="current-password"
-             required
-           >
-
-           <p v-if="auth.error.value" role="alert">
-             {{ auth.error.value.message }}
-           </p>
-
-           <button type="submit" :disabled="auth.isLoading.value">
-             {{ auth.isLoading.value ? 'Validando…' : 'Iniciar sesión' }}
-           </button>
-         </form>
-
-         <aside>
-           <h2>Credenciales disponibles</h2>
-           <ul>
-             <li>Usuario: user@projecthub.dev / projecthub123</li>
-             <li>Admin: admin@projecthub.dev / projecthub123</li>
-           </ul>
-         </aside>
-       </section>
+     <main>
+       <h1>Ingresar a ProjectHub</h1>
+       <!-- .prevent evita que el navegador recargue la página al enviar -->
+       <form @submit.prevent="ingresar">
+         <label for="correo">Correo</label>
+         <input id="correo" v-model.trim="correo" type="email" required />
+         <button type="submit">Entrar</button>
+         <!-- role="alert" hace que el lector de pantalla lea el error -->
+         <p v-if="error" role="alert">{{ error }}</p>
+       </form>
+       <p>Cuentas de prueba: user@projecthub.dev y admin@projecthub.dev</p>
      </main>
    </template>
-
-   <style scoped>
-   .login-view {
-     max-width: 420px;
-     margin: 4rem auto;
-     padding: 2rem;
-     font-family: Arial, sans-serif;
-   }
-
-   form {
-     display: grid;
-     gap: 0.75rem;
-   }
-
-   input,
-   button {
-     padding: 0.65rem;
-   }
-
-   [role='alert'] {
-     color: #b91c1c;
-   }
-   </style>
    ```
 
-3. Crea `src/views/DashboardView.vue`.
+2. Crea en `src/views` estas dos vistas. **Cópialas tal cual, son de apoyo.**
+
+   `ForbiddenView.vue`:
 
    ```vue
-   <template>
-     <section>
-       <h2>Dashboard</h2>
-       <p>Resumen de actividad, proyectos y tareas asignadas.</p>
-     </section>
-   </template>
-   ```
-
-4. Crea `src/views/ProjectsView.vue`.
-
-   ```vue
-   <script setup>
-   import { RouterLink } from 'vue-router'
-
-   const projects = [
-     { id: 'project-01', name: 'Modernización de ProjectHub' },
-     { id: 'project-02', name: 'Automatización de calidad' }
-   ]
-   </script>
-
-   <template>
-     <section>
-       <h2>Proyectos</h2>
-
-       <ul>
-         <li v-for="project in projects" :key="project.id">
-           {{ project.name }}
-         </li>
-       </ul>
-
-       <p>
-         Abre una tarea desde la navegación principal para verificar el parámetro
-         dinámico <code>:taskId</code>.
-       </p>
-
-       <RouterLink
-         :to="{ name: 'task-detail', params: { taskId: 'task-202' } }"
-       >
-         Abrir tarea task-202
-       </RouterLink>
-     </section>
-   </template>
-   ```
-
-5. Crea `src/views/TaskDetailView.vue`. La opción `props: true` en el router entrega `taskId` como prop.
-
-   ```vue
-   <script setup>
-   defineProps({
-     taskId: {
-       type: String,
-       required: true
-     }
-   })
-   </script>
-
-   <template>
-     <section>
-       <h2>Detalle de tarea</h2>
-       <p>Identificador recibido desde la ruta: <strong>{{ taskId }}</strong></p>
-     </section>
-   </template>
-   ```
-
-6. Crea `src/views/AdminView.vue`.
-
-   ```vue
-   <template>
-     <section>
-       <h1>Administración</h1>
-       <p>
-         Esta vista se carga bajo demanda y solo está disponible para usuarios
-         con el rol <code>admin</code>.
-       </p>
-     </section>
-   </template>
-   ```
-
-7. Crea `src/views/ForbiddenView.vue`.
-
-   ```vue
-   <script setup>
-   import { RouterLink, useRoute } from 'vue-router'
-
-   const route = useRoute()
-   </script>
-
    <template>
      <main>
        <h1>Acceso prohibido</h1>
-       <p>No tienes permisos para acceder a este recurso.</p>
-       <p v-if="route.query.redirect">
-         Recurso solicitado: <code>{{ route.query.redirect }}</code>
-       </p>
-       <RouterLink :to="{ name: 'dashboard' }">
-         Volver al dashboard
-       </RouterLink>
+       <p>Tu rol no tiene permiso para ver esa página.</p>
+       <RouterLink :to="{ name: 'dashboard' }">Volver al tablero</RouterLink>
      </main>
    </template>
    ```
 
-8. Crea `src/views/NotFoundView.vue`.
+   `AdminView.vue`:
 
    ```vue
-   <script setup>
-   import { RouterLink } from 'vue-router'
-   </script>
-
    <template>
      <main>
-       <h1>Página no encontrada</h1>
-       <p>La URL solicitada no coincide con ninguna ruta de ProjectHub.</p>
-       <RouterLink :to="{ name: 'dashboard' }">
-         Ir al dashboard
-       </RouterLink>
+       <h1>Administración</h1>
+       <p>Esta vista viaja en su propio archivo: solo la descarga quien entra aquí.</p>
+       <RouterLink :to="{ name: 'dashboard' }">Volver al tablero</RouterLink>
      </main>
    </template>
    ```
 
-9. Crea `src/views/ChunkRecoveryView.vue`.
+3. En `src/router.js` haz seis cambios pequeños; lo demás queda igual.
+   - Debajo de la primera línea, `import { createRouter, createWebHistory } from 'vue-router'`, agrega:
 
-   ```vue
-   <script setup>
-   import { computed } from 'vue'
-   import { useRoute } from 'vue-router'
+     ```js
+     import { useSesion } from './sesion'                           // la guardia consulta la sesión
+     import LoginView from './views/LoginView.vue'                   // pantalla pública de ingreso
+     import ForbiddenView from './views/ForbiddenView.vue'           // aviso de acceso prohibido
+     ```
 
-   const route = useRoute()
+   - Debajo de `import TaskDetailView ...` agrega:
 
-   const target = computed(() => {
-     const value = route.query.target
+     ```js
+     import AdminView from './views/AdminView.vue'                   // vista de administración
+     ```
 
-     if (typeof value === 'string' && value.startsWith('/')) {
-       return value
-     }
+   - Debajo de la ruta `{ path: '/', redirect: ... }` agrega las dos rutas públicas:
 
-     return '/app/dashboard'
+     ```js
+     { path: '/login', name: 'login', component: LoginView },      // pública
+     { path: '/forbidden', name: 'forbidden', component: ForbiddenView }, // pública
+     ```
+
+   - Debajo de `component: ProjectHubLayout, ...` agrega el requisito de la ruta padre:
+
+     ```js
+     meta: { requiresAuth: true },                               // requisito: los hijos lo heredan
+     ```
+
+   - Encima de la ruta comodín (`'/:pathMatch(.*)*'`) agrega la ruta de administración:
+
+     ```js
+     { path: '/admin', name: 'admin', component: AdminView, meta: { requiresAuth: true, roles: ['admin'] } }, // solo admin
+     ```
+
+   - Justo antes de `export default router` agrega la guardia:
+
+     ```js
+     router.beforeEach((to) => {                                     // la guardia: corre antes de CADA navegación
+       const { conectado, usuario } = useSesion()                    // estado de la sesión en este momento
+       if (to.meta.requiresAuth && !conectado.value) {               // pide sesión y no hay
+         return { name: 'login', query: { redirect: to.fullPath } }  // al ingreso, recordando a dónde iba
+       }
+       if (to.meta.roles && !to.meta.roles.includes(usuario.value.rol)) { // pide un rol que no tiene
+         return { name: 'forbidden' }                                // lo manda al aviso de prohibido
+       }
+       if (to.name === 'login' && conectado.value) return { name: 'dashboard' } // ya entró: no repite el ingreso
+     })                                                              // sin return, la navegación sigue
+     ```
+
+**Primero, predice:** sin sesión, escribes en la barra `localhost:5173/app/projects`. ¿Qué dirección ves después?
+
+**Qué debes ver** (cada vez que escribes en la barra, la página se recarga y la sesión, que vive en memoria, se pierde; por eso te pide ingresar otra vez):
+
+1. `/app/projects` sin sesión te lleva a `/login?redirect=/app/projects`. Pulsa **Entrar** con `user@projecthub.dev`: vuelves a `/app/projects` y el encabezado dice "Úrsula (user)", sin enlace de Administración.
+2. Escribe `/admin` y entra otra vez como `user@projecthub.dev`: terminas en `/forbidden`, "Acceso prohibido".
+3. Escribe `/admin` y entra ahora con `admin@projecthub.dev`: ves "Administración".
+4. Escribe un correo que no existe: aparece "Ese correo no está registrado."
+
+## Paso 3. Carga perezosa y precarga (7 minutos)
+
+**Qué vas a hacer y por qué:** hoy todas las vistas viajan en un solo archivo JavaScript, aunque la persona nunca abra Administración. Con `() => import()` cada vista protegida queda en su propio archivo y se descarga al visitarla.
+
+1. En la terminal del servidor pulsa `Ctrl + C` y compila la versión de producción:
+
+   ```bash
+   npm run build
+   ```
+
+   **Predice:** ¿cuántos archivos `.js` aparecen en `dist/assets`?
+
+   **Qué debes ver:** uno solo, `index-<código>.js`.
+
+2. En `src/router.js`, reemplaza las cuatro líneas `import DashboardView ...`, `import ProjectsView ...`, `import TaskDetailView ...` e `import AdminView ...` por estas. Las rutas no cambian: siguen usando los mismos nombres.
+
+   ```js
+   const DashboardView = () => import('./views/DashboardView.vue')   // con la flecha, se descarga al visitarla
+   const ProjectsView = () => import('./views/ProjectsView.vue')     // archivo aparte, bajo demanda
+   const TaskDetailView = () => import('./views/TaskDetailView.vue') // archivo aparte, bajo demanda
+   const AdminView = () => import('./views/AdminView.vue')           // solo lo descarga quien entra a /admin
+   ```
+
+3. **Precarga.** Quien está en el ingreso casi siempre va al tablero, así que se puede bajar antes. En `src/router.js`, justo antes de `export default router`, agrega:
+
+   ```js
+   router.afterEach((to) => {                                      // corre al terminar cada navegación
+     if (to.name === 'login') DashboardView()                      // precarga: desde el ingreso casi todos van al tablero
    })
+   ```
 
-   function retry() {
-     window.location.assign(target.value)
+4. Compila otra vez con `npm run build`.
+
+**Qué debes ver:** cinco archivos `.js`. Así salió en la prueba (los códigos después del guion cambian en cada equipo):
+
+```text
+dist/assets/DashboardView-Nh2AcMzC.js    0.29 kB │ gzip:  0.24 kB
+dist/assets/ProjectsView-Dt9LUflN.js     0.32 kB │ gzip:  0.25 kB
+dist/assets/TaskDetailView-DjST4BNy.js   0.37 kB │ gzip:  0.29 kB
+dist/assets/AdminView-sJhLBL7a.js        0.47 kB │ gzip:  0.35 kB
+dist/assets/index-B_rN-bwI.js           98.70 kB │ gzip: 38.43 kB
+```
+
+Arranca de nuevo con `npm run dev`, abre `http://localhost:5173/login`, pulsa `F12`, pestaña **Network** (Red), filtro **JS**, y recarga. `DashboardView.vue` ya aparece en la lista sin haber entrado: es la precarga. Entra y pulsa **Proyectos**: `ProjectsView.vue` aparece en ese momento, no antes.
+
+## Paso 4. Errores de navegación y fragmento perdido (7 minutos)
+
+**Qué vas a hacer y por qué:** cada `import()` del paso 3 genera un fragmento (en inglés, *chunk*): un archivo `.js` aparte con una vista. Si publicas una versión nueva mientras alguien tiene la aplicación abierta, su navegador pedirá un fragmento que ya no existe: un fragmento perdido. `router.onError` atrapa ese fallo y muestra una pantalla de rescate en lugar de dejar la pantalla quieta.
+
+1. Crea `src/views/ChunkRecoveryView.vue`:
+
+   ```vue
+   <script setup>
+   import { useRoute } from 'vue-router'                // para leer ?target= de la dirección
+
+   const route = useRoute()                             // la ruta actual
+
+   function recargar() {                                // acción del botón Recargar
+     const destino = String(route.query.target || '/')  // la página que no se pudo abrir
+     const url = new URL(destino, window.location.origin)  // dirección completa, como la entiende el navegador
+     const interno = url.origin === window.location.origin // solo direcciones de esta aplicación
+     window.location.assign(interno ? url.pathname + url.search + url.hash : '/') // recarga completa: trae la versión publicada
    }
    </script>
 
    <template>
      <main>
-       <h1>No se pudo cargar una parte de la aplicación</h1>
-       <p>
-         Es posible que haya una versión nueva disponible o que se haya producido
-         un error de red al cargar una vista bajo demanda.
-       </p>
-
-       <button type="button" @click="retry">
-         Recargar e intentar nuevamente
-       </button>
+       <h1>No se pudo cargar esta parte de la aplicación</h1>
+       <p>Puede que se haya publicado una versión nueva. Recarga para traerla.</p>
+       <button type="button" @click="recargar">Recargar</button>
      </main>
    </template>
    ```
 
-**Resultado esperado:**
+2. En `src/router.js` haz tres cambios:
+   - Debajo de `import NotFoundView ...` agrega:
 
-- La vista de login permite iniciar sesión.
-- `ProjectHubLayout` contiene el segundo `<RouterView />` necesario para las rutas hijas de `/app`.
-- El enlace administrativo solo se muestra a usuarios con rol `admin`.
-- `TaskDetailView` recibe el parámetro `taskId` como prop.
-- Existe una vista específica para recuperación de carga dinámica.
+     ```js
+     import ChunkRecoveryView from './views/ChunkRecoveryView.vue'   // aviso cuando falla la descarga de una vista
+     ```
 
-**Verificación:**
+   - Debajo de la ruta `/forbidden` agrega:
 
-Inicia el servidor:
+     ```js
+     { path: '/chunk-recovery', name: 'chunk-recovery', component: ChunkRecoveryView }, // pública
+     ```
 
-```bash
-npm run dev -- --host 127.0.0.1 --port 5173
+   - Justo antes de `export default router` agrega:
+
+     ```js
+     router.afterEach((to, from, failure) => {                       // segundo oyente: navegaciones que no se completaron
+       if (failure) console.info('[ProjectHub] Navegación no completada:', failure.message) // aviso, no error
+     })
+
+     router.onError((error, to) => {                                 // errores al navegar, como una descarga fallida
+       const perdido = /dynamically imported module|Importing a module script failed/i.test(error.message) // ¿falló la descarga?
+       if (perdido) router.replace({ name: 'chunk-recovery', query: { target: to.fullPath } }) // muestra el aviso
+     })
+     ```
+
+3. Con `npm run dev` corriendo, entra a la aplicación, abre la consola (`F12`, pestaña **Console**) y pulsa **Proyectos** dos veces. **Qué debes ver:** `[ProjectHub] Navegación no completada: Avoided redundant navigation...`. Es un aviso informativo: ir a donde ya estás no es un error.
+
+4. Simula una publicación nueva. Detén el servidor con `Ctrl + C`, compila y borra el archivo de Administración:
+
+   ```bash
+   npm run build
+   ```
+
+   Borra el fragmento de Administración. Windows (PowerShell):
+
+   ```powershell
+   Remove-Item dist/assets/AdminView-*.js
+   ```
+
+   macOS y Linux:
+
+   ```bash
+   rm dist/assets/AdminView-*.js
+   ```
+
+   Luego sirve la versión compilada:
+
+   ```bash
+   npm run preview
+   ```
+
+**Primero, predice:** como admin, ¿qué pasa al abrir una vista cuyo archivo ya no está?
+
+**Qué debes ver:** abre `http://localhost:4173/admin` y entra con `admin@projecthub.dev`. Terminas en `/chunk-recovery?target=/admin` con "No se pudo cargar esta parte de la aplicación". En la consola, en rojo, `Failed to load resource: the server responded with a status of 404 (Not Found)` para `AdminView-<código>.js`: es el fallo que provocaste a propósito. Detén el servidor con `Ctrl + C`.
+
+## Paso 5. Comprueba el resultado (2 minutos)
+
+Marca cada resultado de la diapositiva "Resultados esperados":
+
+| Resultado | Lo viste en |
+|---|---|
+| Sin sesión, `/app/...` va a `/login` y regresa al entrar | Paso 2, punto 1 |
+| En `/admin`, el rol `user` ve `/forbidden`; `admin` entra | Paso 2, puntos 2 y 3 |
+| Las vistas protegidas se descargan al visitarlas | Paso 3, `npm run build` y pestaña Network |
+| Ruta inválida: `NotFoundView`. Fragmento perdido: `ChunkRecoveryView` | Pasos 1 y 4 |
+
+<details>
+<summary>Código final de <code>src/router.js</code> (el único archivo que cambió después de crearlo)</summary>
+
+```js
+import { createRouter, createWebHistory } from 'vue-router'    // funciones para crear el enrutador
+import { useSesion } from './sesion'                           // la guardia consulta la sesión
+import LoginView from './views/LoginView.vue'                   // pantalla pública de ingreso
+import ForbiddenView from './views/ForbiddenView.vue'           // aviso de acceso prohibido
+import ProjectHubLayout from './views/ProjectHubLayout.vue'     // marco con el menú del área de trabajo
+import NotFoundView from './views/NotFoundView.vue'             // página para direcciones que no existen
+import ChunkRecoveryView from './views/ChunkRecoveryView.vue'   // aviso cuando falla la descarga de una vista
+const DashboardView = () => import('./views/DashboardView.vue')   // con la flecha, se descarga al visitarla
+const ProjectsView = () => import('./views/ProjectsView.vue')     // archivo aparte, bajo demanda
+const TaskDetailView = () => import('./views/TaskDetailView.vue') // archivo aparte, bajo demanda
+const AdminView = () => import('./views/AdminView.vue')           // solo lo descarga quien entra a /admin
+
+const routes = [                                                // la tabla: dirección -> componente
+  { path: '/', redirect: { name: 'dashboard' } },               // la raíz lleva al tablero, por nombre
+  { path: '/login', name: 'login', component: LoginView },      // pública
+  { path: '/forbidden', name: 'forbidden', component: ForbiddenView }, // pública
+  { path: '/chunk-recovery', name: 'chunk-recovery', component: ChunkRecoveryView }, // pública
+  {
+    path: '/app',                                               // ruta padre del área de trabajo
+    component: ProjectHubLayout,                                // su RouterView dibuja a los hijos
+    meta: { requiresAuth: true },                               // requisito: los hijos lo heredan
+    children: [                                                 // hijas: /app/dashboard, /app/projects...
+      { path: 'dashboard', name: 'dashboard', component: DashboardView },
+      { path: 'projects', name: 'projects', component: ProjectsView },
+      { path: 'tasks/:taskId', name: 'task-detail', component: TaskDetailView, props: true }, // :taskId llega como prop
+    ],
+  },
+  { path: '/admin', name: 'admin', component: AdminView, meta: { requiresAuth: true, roles: ['admin'] } }, // solo admin
+  { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView }, // comodín: siempre de último
+]
+
+const router = createRouter({ history: createWebHistory(), routes }) // direcciones limpias, sin #
+
+router.beforeEach((to) => {                                     // la guardia: corre antes de CADA navegación
+  const { conectado, usuario } = useSesion()                    // estado de la sesión en este momento
+  if (to.meta.requiresAuth && !conectado.value) {               // pide sesión y no hay
+    return { name: 'login', query: { redirect: to.fullPath } }  // al ingreso, recordando a dónde iba
+  }
+  if (to.meta.roles && !to.meta.roles.includes(usuario.value.rol)) { // pide un rol que no tiene
+    return { name: 'forbidden' }                                // lo manda al aviso de prohibido
+  }
+  if (to.name === 'login' && conectado.value) return { name: 'dashboard' } // ya entró: no repite el ingreso
+})                                                              // sin return, la navegación sigue
+
+router.afterEach((to) => {                                      // corre al terminar cada navegación
+  if (to.name === 'login') DashboardView()                      // precarga: desde el ingreso casi todos van al tablero
+})
+
+router.afterEach((to, from, failure) => {                       // segundo oyente: navegaciones que no se completaron
+  if (failure) console.info('[ProjectHub] Navegación no completada:', failure.message) // aviso, no error
+})
+
+router.onError((error, to) => {                                 // errores al navegar, como una descarga fallida
+  const perdido = /dynamically imported module|Importing a module script failed/i.test(error.message) // ¿falló la descarga?
+  if (perdido) router.replace({ name: 'chunk-recovery', query: { target: to.fullPath } }) // muestra el aviso
+})
+
+export default router                                           // main.js lo conecta a la aplicación
 ```
 
-Accede a:
+</details>
 
-```text
-http://127.0.0.1:5173/login
-```
+## Problemas frecuentes
 
-Inicia sesión con:
-
-```text
-user@projecthub.dev
-projecthub123
-```
-
-Debes terminar en:
-
-```text
-http://127.0.0.1:5173/app/dashboard
-```
-
----
-
-### Paso 6. Verificar redirecciones, roles, carga perezosa y telemetría
-
-**Objetivo:** Validar el comportamiento funcional completo del flujo de navegación.
-
-**Instrucciones:**
-
-1. Con sesión cerrada, abre directamente:
-
-   ```text
-   http://127.0.0.1:5173/app/projects
-   ```
-
-2. Inicia sesión como usuario estándar:
-
-   ```text
-   user@projecthub.dev
-   projecthub123
-   ```
-
-3. Comprueba que se conserva el destino original y que terminas en `/app/projects`.
-
-4. Abre:
-
-   ```text
-   http://127.0.0.1:5173/app/tasks/task-202
-   ```
-
-5. Confirma que la página muestra `task-202`.
-
-6. Como usuario estándar, abre:
-
-   ```text
-   http://127.0.0.1:5173/admin
-   ```
-
-7. Comprueba que eres redirigido a `/forbidden`.
-
-8. Cierra sesión desde el layout.
-
-9. Inicia sesión como administrador:
-
-   ```text
-   admin@projecthub.dev
-   projecthub123
-   ```
-
-10. Abre `/admin` y confirma que se muestra la vista administrativa.
-
-11. Abre las herramientas de desarrollo de Chrome, pestaña **Network**, y activa el filtro **JS**. Navega entre Dashboard, Proyectos, Detalle de tarea y Administración.
-
-12. Observa solicitudes de archivos JavaScript generados para las vistas cargadas dinámicamente. Los nombres exactos de los chunks dependen de Vite, pero deben cargarse al navegar por primera vez a cada vista lazy.
-
-13. Revisa la consola de Chrome. Debes observar mensajes similares a:
-
-   ```text
-   [ProjectHub telemetry] {
-     event: "navigation",
-     from: "/app/dashboard",
-     to: "/app/projects",
-     routeName: "projects",
-     status: "completed"
-   }
-   ```
-
-**Resultado esperado:**
-
-- Los visitantes no autenticados son enviados a `/login`.
-- Después del login se restaura la ruta solicitada originalmente.
-- El rol `user` no puede acceder a `/admin`.
-- El rol `admin` sí puede acceder a `/admin`.
-- Las vistas protegidas configuradas con `import()` se descargan de forma diferida.
-- Cada navegación genera telemetría en consola.
-
-**Verificación:**
-
-Ejecuta estas comprobaciones manuales:
-
-| Caso | Acción | Resultado esperado |
+| Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
-| Ruta pública | Abrir `/login` sin sesión | Se visualiza el formulario de login |
-| Ruta protegida | Abrir `/app/dashboard` sin sesión | Redirección a `/login?redirect=/app/dashboard` |
-| Redirección posterior | Autenticarse después del caso anterior | Retorno a `/app/dashboard` |
-| Parámetro dinámico | Abrir `/app/tasks/task-202` | Se muestra `task-202` |
-| Usuario sin permisos | Autenticarse como `user` y abrir `/admin` | Redirección a `/forbidden` |
-| Administrador | Autenticarse como `admin` y abrir `/admin` | Se carga `AdminView` |
-| Ruta inválida | Abrir `/ruta-inexistente` | Se muestra `NotFoundView` |
-| Error de chunk | Simular fallo de importación dinámica | Se muestra `ChunkRecoveryView` |
-
-Para una comprobación rápida de calidad estática, ejecuta el script disponible en tu proyecto:
-
-```bash
-npm run lint
-```
-
-Si el proyecto no incluye el script `lint`, inspecciona la compilación ejecutando:
-
-```bash
-npm run build
-```
-
-La compilación debe finalizar sin errores de importación, rutas no resueltas ni errores de sintaxis.
-
-## Validación y pruebas
-
-Realiza la siguiente secuencia final sin reiniciar el navegador entre pasos:
-
-1. Abre `http://127.0.0.1:5173/app/dashboard` sin sesión.
-2. Verifica la redirección a login.
-3. Inicia sesión como `user@projecthub.dev`.
-4. Navega a Proyectos y a una tarea.
-5. Intenta acceder manualmente a `/admin`.
-6. Comprueba la pantalla de acceso prohibido.
-7. Cierra sesión.
-8. Inicia sesión como `admin@projecthub.dev`.
-9. Accede a `/admin`.
-10. Visita una ruta inexistente, por ejemplo:
-
-    ```text
-    http://127.0.0.1:5173/no-existe
-    ```
-
-11. Abre la consola y confirma que las navegaciones producen eventos `[ProjectHub telemetry]`.
-
-Para comprobar manualmente el flujo de recuperación de chunks durante desarrollo, puedes modificar temporalmente una importación dinámica a una ruta inexistente:
-
-```js
-component: () => import('@/views/ArchivoInexistente.vue')
-```
-
-Navega a esa ruta, verifica que el router dirige a `ChunkRecoveryView` y restaura inmediatamente la importación correcta. No conserves esta modificación en el código final.
-
-## Solución de problemas
-
-### 1. La solicitud de login intenta llegar a una API real o aparece `Failed to fetch`
-
-**Síntomas:** Al enviar el formulario de login se muestra un error de red, no aparece `[MSW] Mocking enabled.` en consola o la pestaña Network indica que la solicitud no fue interceptada.
-
-**Causa:** El worker de MSW no se generó en `public/`, `src/mocks/browser.js` no se carga desde `main.js`, o la URL del handler no coincide exactamente con la URL usada por `useAuthSession.js`.
-
-**Solución:**
-
-```bash
-npx msw@2.7.3 init public/ --save
-```
-
-Confirma además que:
-
-- Existe `public/mockServiceWorker.js`.
-- `main.js` contiene `await worker.start(...)` dentro de `if (import.meta.env.DEV)`.
-- `handlers.js` intercepta `http://127.0.0.1:5173/api/auth/login`.
-- `useAuthSession.js` usa el mismo origen y ruta.
-- Vite se ejecuta exactamente con `--host 127.0.0.1 --port 5173`.
-
-### 2. La URL cambia a `/app/dashboard`, pero no se muestra la vista hija
-
-**Síntomas:** La navegación funciona y la URL es correcta, pero el área principal permanece vacía o solo se ve la cabecera del layout.
-
-**Causa:** `ProjectHubLayout.vue` no contiene un `<RouterView />`, o se importó `RouterView` incorrectamente.
-
-**Solución:**
-
-Verifica que `ProjectHubLayout.vue` tenga esta importación:
-
-```js
-import { RouterLink, RouterView, useRouter } from 'vue-router'
-```
-
-También debe contener este punto de renderizado dentro de su plantilla:
-
-```vue
-<main>
-  <RouterView />
-</main>
-```
-
-Las rutas hijas de `/app` solo pueden mostrarse dentro del `<RouterView />` del componente padre.
+| `npx : ... running scripts is disabled on this system` en PowerShell | Windows bloquea los scripts de npm | Ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` y repite, o usa la terminal `cmd` |
+| `Failed to resolve import "vue-router"` | Falta instalar el enrutador | `npm install vue-router@4.6` dentro de `projecthub-router` |
+| La dirección es `/app/dashboard` pero no se ve "Tablero" | Falta el `<RouterView />` dentro de `ProjectHubLayout.vue` | Revisa el paso 1.2: el padre necesita su propio `RouterView` |
+| `Uncaught Error: No match for {"name":"admin"...}` | Un enlace usa un nombre de ruta que no existe en la tabla | Revisa que el `name` del enlace y el de la ruta se escriban igual |
+| Te pide ingresar otra vez tras escribir en la barra o guardar `sesion.js` | La sesión vive en memoria y la página se recargó | Es normal en este laboratorio; en el capítulo 4 se guarda con un plugin de persistencia de Pinia (4.3) |
+| La primera vez que abres la aplicación tras el paso 1, la página se recarga sola y la terminal dice `new dependencies optimized: vue-router` | Vite prepara el enrutador la primera vez que alguien lo importa | Es normal y pasa una sola vez; espera a que cargue y sigue |
+| Al pulsar **Entrar** tarda unos segundos la primera vez | En desarrollo, Vite compila cada vista la primera vez que se pide | Espera; las siguientes veces es inmediato |
+| `Port 4173 is in use, trying another one...` al usar `npm run preview` | Otra versión compilada quedó servida | Usa la dirección que muestra la terminal o cierra la otra con `Ctrl + C` |
+| `Port 5173 is in use, trying another one...` | Otro servidor quedó abierto | Usa la dirección que muestra la terminal o cierra el otro con `Ctrl + C` |
+| Tras el paso 3, `npm run build` sigue con un solo `.js` | Quedó alguna `import ... from` de una vista protegida | Revisa que las cuatro líneas usen `() => import(...)` |
 
 ## Limpieza
 
-1. Detén el servidor de desarrollo con `Ctrl+C`.
-2. Verifica que no queden procesos adicionales usando el puerto `5173`.
-3. No inicies ni dejes servicios ejecutándose en el puerto `3000`.
-4. Revisa los cambios pendientes antes de continuar con el siguiente laboratorio:
+Pulsa `Ctrl + C` en la terminal de `npm run dev` o de `npm run preview`. Puedes borrar la carpeta `dist`; `npm run build` la vuelve a crear.
 
-   ```bash
-   git status
-   ```
+## Ejercicios de reserva
 
-5. Mantén la rama de trabajo `main`; no crees ramas adicionales para esta tanda de laboratorios.
-6. Conserva `public/mockServiceWorker.js`, los handlers de MSW, los composables y la configuración del router. Serán la base para la migración a Pinia del laboratorio `04-00-01`.
+**Básico.** Haz que `/app/tasks/abc` caiga en "Página no encontrada" y que solo se acepten identificadores como `task-202`.
 
-## Resumen
+<details><summary>Solución</summary>
 
-En este laboratorio implementaste una arquitectura de navegación avanzada para ProjectHub. Configuraste rutas públicas, rutas protegidas y rutas anidadas con `ProjectHubLayout` y `<RouterView />`. También aplicaste `meta.requiresAuth`, `meta.roles`, guards globales `beforeEach`, telemetría con `afterEach` y lazy loading mediante importaciones dinámicas.
+En la ruta hija, cambia el `path` por `'tasks/:taskId(task-\\d+)'`: la expresión entre paréntesis exige `task-` seguido de dígitos. `/app/tasks/abc` ya no coincide y cae en el comodín.
 
-La autenticación se simuló con MSW a través del endpoint `POST /api/auth/login`, mientras que `useAsyncState.js` centralizó los estados de carga y error. Finalmente, añadiste una ruta comodín para recursos no encontrados y una pantalla de recuperación para errores de carga de chunks. En el siguiente bloque, el estado de sesión y las definiciones relacionadas se migrarán a stores Pinia con persistencia controlada y efectos secundarios centralizados.
+</details>
+
+**Medio.** Precarga Administración cuando la persona pasa el puntero sobre su enlace, y comprueba en Network que pasarlo diez veces produce una sola descarga.
+
+<details><summary>Solución</summary>
+
+En `src/views/ProjectHubLayout.vue`, dentro de `<script setup>`, agrega:
+
+```js
+const precargarAdmin = () => import('./AdminView.vue') // descarga el fragmento de Administración
+```
+
+Y en el enlace de Administración agrega el evento: `<RouterLink :to="{ name: 'admin' }" @mouseenter="precargarAdmin">`. El navegador guarda el módulo la primera vez; las siguientes llamadas reutilizan esa descarga.
+
+</details>
+
+**Avanzado.** Ante un fragmento perdido, recarga sola una única vez; si vuelve a fallar, muestra la pantalla de rescate.
+
+<details><summary>Solución</summary>
+
+En `router.onError`, antes del `router.replace`:
+
+```js
+if (perdido && !sessionStorage.getItem('recargado')) { // primer fallo: nadie ha recargado aún
+  sessionStorage.setItem('recargado', '1')             // marca el intento para no recargar en bucle
+  window.location.assign(to.fullPath)                  // recarga completa hacia la página pedida
+  return                                               // no muestra el aviso todavía
+}
+```
+
+En `src/views/ChunkRecoveryView.vue` borra la marca al montar, para que el próximo despliegue vuelva a intentarlo. Agrega en `<script setup>`:
+
+```js
+import { onMounted } from 'vue'                                  // gancho de ciclo de vida
+onMounted(() => sessionStorage.removeItem('recargado'))          // el aviso ya se mostró: quita la marca
+```
+
+Al probarlo con el paso 4: el primer fallo recarga y te pide ingresar otra vez (la sesión vive en memoria); al entrar de nuevo falla otra vez y ahora sí ves el aviso.
+
+</details>
+
+## Recursos
+
+- [Rutas anidadas](https://router.vuejs.org/guide/essentials/nested-routes): cómo declarar rutas hijas dentro de otra ruta.
+- [Pasar parámetros como props](https://router.vuejs.org/guide/essentials/passing-props): `props: true` y sus variantes.
+- [Guardias de navegación](https://router.vuejs.org/guide/advanced/navigation-guards): su orden y lo que pueden devolver.
+- [Campos meta](https://router.vuejs.org/guide/advanced/meta): declarar los requisitos de cada ruta.
+- [Carga perezosa de rutas](https://router.vuejs.org/guide/advanced/lazy-loading): descargar cada vista solo cuando alguien la pide.
