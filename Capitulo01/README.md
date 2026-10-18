@@ -25,38 +25,25 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
 
 ## Antes de empezar
 
-- **Node.js 20.18 o 22.11** (el programa que ejecuta JavaScript fuera del navegador). Compruébalo con `node -v`.
+- **Node.js 20, 22 o 24** (el programa que ejecuta JavaScript fuera del navegador). Compruébalo con `node -v`. La guía se validó con 24.22.0, la versión LTS (Long Term Support, con soporte extendido) vigente.
 - Google Chrome y Visual Studio Code. Si VS Code ofrece la extensión **Vue (Official)**, acéptala: colorea los archivos `.vue`.
-- Opcional: la extensión **Vue Devtools** en Chrome.
+- No descargas nada más: el proyecto se crea desde cero en una carpeta vacía.
 
 ## Preparación (4 minutos)
 
-1. Abre una terminal en una carpeta tuya para el curso (por ejemplo, `labs-vue` en Documentos) y crea el proyecto. El comando es igual en Windows, macOS y Linux:
+1. Abre una terminal en una carpeta tuya para el curso (por ejemplo, `labs-vue` en Documentos) y crea el proyecto con create-vue, la herramienta oficial de Vue (la misma de `npm create vue@latest` del capítulo 0), en una versión fija. El comando es igual en Windows (PowerShell), macOS y Linux:
 
    ```bash
-   npx create-vite@6.4 catalogo --template vue
+   npx --yes create-vue@3.16.4 catalogo --default --bare
    cd catalogo
    npm install
    ```
 
-   `npx create-vite@6.4` usa la versión 6.4 del creador de proyectos de Vite, que funciona con el Node.js del curso, y crea la carpeta `catalogo` con la plantilla de Vue sin hacer preguntas. Si pregunta `Ok to proceed? (y)`, responde `y`.
+   `--yes` acepta descargar el creador sin preguntar. `--default` responde "No" a todas las opciones (TypeScript, Router, Pinia, pruebas), porque este laboratorio no las necesita, y `--bare` deja un proyecto mínimo, sin componentes de ejemplo. Escribe las opciones sin `--` delante del nombre: PowerShell se lo come. Al terminar, create-vue sugiere `npm run dev`: no lo ejecutes todavía; en el paso 1.5 arrancas el servidor con el puerto propio del laboratorio. `npm install` puede tardar un par de minutos.
 
-2. Abre la carpeta `catalogo` en VS Code. Borra el archivo `src/components/HelloWorld.vue`: es de la plantilla y no lo usarás.
+2. Abre la carpeta `catalogo` en VS Code y mira qué trae: `index.html` (la página con `<div id="app">`), `vite.config.js` (Vite 6 con el atajo `@` hacia `src` y las Vue DevTools, el panel de depuración que aparece como un botón flotante abajo de la página), `jsconfig.json`, `public/favicon.ico`, `.vscode/`, `.gitignore`, `README.md`, y en `src` solo `main.js` y `App.vue`. No borras ninguno y `vite.config.js` no lo cambias.
 
-3. En `index.html`, cambia `<html lang="en">` por `<html lang="es">` (así el lector de pantalla lee en español) y `<title>Vite + Vue</title>` por `<title>Catálogo - Laboratorio 1</title>`.
-
-4. Reemplaza todo `vite.config.js` por este, que fija el puerto del laboratorio:
-
-   ```js
-   // Configuración de Vite: el servidor que muestra la aplicación mientras la construyes
-   import { defineConfig } from 'vite'          // da autocompletado a la configuración
-   import vue from '@vitejs/plugin-vue'         // le enseña a Vite a leer archivos .vue
-
-   export default defineConfig({
-     plugins: [vue()],                          // activa el complemento de Vue
-     server: { port: 5171, strictPort: true }   // puerto fijo del laboratorio 1; si está ocupado, avisa
-   })
-   ```
+3. En `index.html`, cambia `<html lang="">` por `<html lang="es">` (así el lector de pantalla lee en español) y `<title>Vite App</title>` por `<title>Catálogo - Laboratorio 1</title>`.
 
 **Qué debes ver:** `npm install` termina con `added ... packages` y sin errores en rojo.
 
@@ -64,7 +51,7 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
 
 **Qué vas a hacer y por qué:** armas el catálogo tal como lo escribiría alguien con prisa. Funciona, pero trabaja de más; en los pasos siguientes lo vas a medir y corregir.
 
-1. Cuatro archivos de apoyo. **Cópialos tal cual, no son el tema de hoy.** Reemplaza todo `src/style.css` y `src/main.js`, y crea `src/datos.js` y `src/medicion.js`:
+1. Cuatro archivos de apoyo. **Cópialos tal cual, no son el tema de hoy.** Reemplaza todo `src/main.js` (el de create-vue no carga estilos ni activa la medición) y crea `src/style.css`, `src/datos.js` y `src/medicion.js`:
 
    `src/style.css`
 
@@ -95,7 +82,7 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
    import './style.css'                         // estilos de toda la aplicación
 
    const app = createApp(App)                   // crea la aplicación con el componente principal
-   app.config.performance = true                // deja que Chrome y Vue Devtools midan cada dibujo
+   app.config.performance = true                // deja que Chrome mida cada dibujo (pestaña Rendimiento)
    app.mount('#app')                            // la dibuja dentro de <div id="app"> de index.html
    ```
 
@@ -182,7 +169,7 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
    </template>
    ```
 
-3. Crea `src/components/ListaProductos.vue`. La búsqueda vive aquí porque solo la lista la usa:
+3. Crea `src/components/ListaProductos.vue`. La carpeta `components` todavía no existe: créala dentro de `src` (en VS Code, si escribes `components/ListaProductos.vue` como nombre del archivo nuevo, la crea sola). La búsqueda vive aquí porque solo la lista la usa:
 
    ```html
    <script setup>
@@ -252,11 +239,13 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
    </template>
    ```
 
-5. Arranca el servidor de desarrollo y abre `http://localhost:5171` en Chrome:
+5. Arranca el servidor de desarrollo en el puerto 5171 y deja esa terminal abierta. `npx vite` ejecuta el Vite instalado en el proyecto; el comando es igual en PowerShell, macOS y Linux:
 
    ```bash
-   npm run dev
+   npx vite --port 5171
    ```
+
+   Abre en Chrome la dirección que muestra la terminal en `Local:`, `http://localhost:5171/`.
 
 **Qué debes ver:** el catálogo con 12 tarjetas y, a la derecha, el panel **Medición** con Dibujos de tarjetas **0**, Dibujos de la lista **0** y Cálculos del filtro **1** (el filtro se calculó una vez para dibujar la lista al abrir). Escribe "cable" en el buscador: queda solo "Cable HDMI".
 
@@ -281,7 +270,7 @@ Repaso de Vue básico: `ref`, `v-for` con `:key`, `v-model`, props y eventos (`d
 
 **Por qué pasa:** cada tarjeta llamó a `esFavorito()`, que lee la lista completa de favoritos. Vue anotó que las 12 la leyeron; cuando cambia, las redibuja a todas.
 
-**Opcional, fuera del tiempo del laboratorio (2 minutos), con la herramienta real:** en Chrome pulsa `F12`, pestaña **Rendimiento** (Performance), botón de grabar, marca otra estrella y detén la grabación. En la fila **Tiempos** (Timings) aparecen 12 marcas `<TarjetaProducto> patch`, una por tarjeta; las crea `app.config.performance = true` de `main.js`. Vue Devtools muestra lo mismo en su pestaña **Timeline**, capa **Performance**.
+**Opcional, fuera del tiempo del laboratorio (2 minutos), con la herramienta real:** en Chrome pulsa `F12`, pestaña **Rendimiento** (Performance), botón de grabar, marca otra estrella y detén la grabación. En la fila **Tiempos** (Timings) aparecen 12 marcas `<TarjetaProducto> patch`, una por tarjeta; las crea `app.config.performance = true` de `main.js`.
 
 ## Paso 3. Guardar el filtro con computed (2 minutos)
 
@@ -428,7 +417,7 @@ La lista se sigue dibujando una vez porque muestra "Favoritos: N de 13 productos
 
 ## Resultado esperado
 
-- Componentes que se redibujan de más, identificados con números (y en Chrome o Vue Devtools, si hiciste el paso opcional).
+- Componentes que se redibujan de más, identificados con números (y en la pestaña Rendimiento de Chrome, si hiciste el paso opcional).
 - `shallowRef` aplicado a la lista de productos.
 - Filtro con `computed`, sin cálculos repetidos.
 - Dibujos de las tarjetas: de 12 a 1.
@@ -539,10 +528,11 @@ npx vite --port 5171     # arranca la aplicación en http://localhost:5171
 
 | Lo que ves | Por qué pasa | Cómo se arregla |
 |---|---|---|
-| El creador se queda en `Select a framework:` | En PowerShell, la forma `npm create vite@6.4 catalogo -- --template vue` pierde el `--` y la plantilla no llega | Pulsa `Ctrl + C` y usa el comando de la guía: `npx create-vite@6.4 catalogo --template vue` |
+| El creador pregunta `Add TypeScript?` o falla con `ERR_TTY_INIT_FAILED` | Faltó `--default`: con solo `--bare`, create-vue hace sus preguntas | Pulsa `Ctrl + C`, borra la carpeta `catalogo` si se creó y usa `npx --yes create-vue@3.16.4 catalogo --default --bare` |
+| Avisos `EBADENGINE` o `Vite requires Node.js version ...` | Se usó `create-vue@latest` con un Node.js antiguo: las versiones nuevas traen Vite 7, que pide Node.js 20.19 o 22.12 en adelante | Crea el proyecto otra vez con la versión fija `create-vue@3.16.4` |
 | `npm error enoent ... package.json` | La terminal no está en la carpeta `catalogo` | Entra con `cd catalogo` y repite el comando |
-| `Port 5171 is already in use` | Otro servidor quedó abierto | Ciérralo con `Ctrl + C` en su terminal, o cierra esa terminal |
-| `Failed to resolve import "./components/HelloWorld.vue"` | `App.vue` todavía es el de la plantilla | Reemplaza todo `src/App.vue` (paso 1.2) |
+| La terminal muestra `Local: http://localhost:5172/` en vez de 5171 | Otro servidor ocupa el puerto 5171 y Vite tomó el siguiente | Cierra el otro servidor con `Ctrl + C` en su terminal, o abre la dirección que muestra la terminal |
+| Sigue el título "You did it!" o falla `Failed to resolve import "./components/ListaProductos.vue"` | `App.vue` todavía es el de create-vue, o falta crear `src/components/ListaProductos.vue` | Reemplaza todo `src/App.vue` (paso 1.2) y crea la carpeta `src/components` con sus dos archivos (pasos 1.3 y 1.4) |
 | La página queda en blanco tras guardar | Error de sintaxis en el archivo | Mira la consola de Chrome (`F12`) y la terminal: dicen el archivo y la línea |
 | `[Vue warn]: Property "esFavorito" was accessed during render but is not defined` | Guardaste `TarjetaProducto.vue` después de 4.3 y antes de 4.4 | Haz el cambio 4.4 y guarda; si la página no se recupera, recárgala con `F5` |
 | Las tarjetas siguen en 12 tras el paso 4 | La plantilla aún usa `esFavorito()` o la lista no pasa `:favorito` | Revisa los pasos 4.2 y 4.4 |
@@ -612,13 +602,14 @@ function fila(id) { console.count('fila dibujada'); return id } // cuenta en la 
 
 ## Recursos
 
+- [Crear un proyecto de Vue con create-vue](https://vuejs.org/guide/quick-start#creating-a-vue-application): la herramienta oficial con la que empieza este laboratorio.
 - [Reactividad en profundidad](https://vuejs.org/guide/extras/reactivity-in-depth): cómo Vue vigila datos y actualiza la pantalla.
 - [Propiedades computadas](https://vuejs.org/guide/essentials/computed): valores calculados que se guardan y recalculan solos.
 - [Rendimiento](https://vuejs.org/guide/best-practices/performance): técnicas oficiales, incluidas `shallowRef` y props estables.
 - [v-memo](https://vuejs.org/api/built-in-directives#v-memo) y [app.config.performance](https://vuejs.org/api/application#app-config-performance).
 - [Pestaña Rendimiento de Chrome](https://developer.chrome.com/docs/devtools/performance).
 
-Enlaces comprobados el 16 de octubre de 2026.
+Enlaces comprobados el 18 de octubre de 2026.
 
 ## Control de cambios
 
@@ -627,3 +618,4 @@ Enlaces comprobados el 16 de octubre de 2026.
 | 1.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía corta con proyecto inicial descargable y solución aparte |
 | 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Arranque en carpeta vacía con `npm create vite@6.4`: la guía trae todo el código. Búsqueda local en la lista, panel dentro de `App.vue`, medición opcional en la pestaña Rendimiento de Chrome, ejercicios de reserva con solución desplegable (incluido `v-memo`). Puerto 5171 |
 | 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI en Windows 11 (PowerShell) y Linux desde carpeta vacía. `npx create-vite@6.4` en lugar de `npm create vite@6.4 ... -- --template vue`, que en PowerShell se queda en `Select a framework:`. Contadores iniciales reales (0, 0 y 1). Tiempos por paso que suman 24 minutos, opcional de Chrome fuera del tiempo, aviso de guardado en 4.3 y 4.4 y de `App.vue` antes de 5.2, cambios de `App.vue` en dos bloques, columna "Después" medida de nuevo, 13 productos, expresión regular `\u0300-\u036f` e imágenes con el número de paso real |
+| 2.2 | 2026-10-18 | Andrés Eduardo García Márquez | El proyecto se crea con create-vue, la herramienta oficial que enseñan los manuales: `npx --yes create-vue@3.16.4 catalogo --default --bare`. La guía dice qué trae el proyecto; ya no se borra `HelloWorld.vue` ni se reemplaza `vite.config.js` (el puerto se da con `npx vite --port 5171`); `src/style.css` y `src/components/` se crean. Node.js 20, 22 o 24; sin imágenes; problemas frecuentes de create-vue y del puerto ocupado; `ejercicio-resuelto/` rehecho siguiendo la guía. Validada paso a paso en Windows 11 y en Linux con Node.js 24.22.0 |
