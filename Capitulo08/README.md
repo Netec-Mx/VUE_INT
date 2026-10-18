@@ -28,7 +28,7 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
 
 ## Antes de empezar
 
-- Node.js 20 o 22 (validado con 22.3), Git, Chrome y Docker Desktop abierto.
+- Node.js 24 LTS (validado con 24.22.0), Git, Chrome y Docker Desktop abierto.
 - Cuenta de GitHub y GitHub CLI (`gh`, la herramienta de GitHub para la terminal) con sesión iniciada. Sin ella llegas hasta el paso 4 y el 5 lo ves en el equipo del instructor.
 - Los comandos sirven igual en PowerShell y en bash, salvo donde se indica.
 
@@ -54,7 +54,7 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
 2. En **otra** terminal, deja descargando las imágenes base mientras avanzas:
 
    ```bash
-   docker pull node:22.14.0-alpine
+   docker pull node:24.22.0-alpine
    docker pull nginx:1.27.3-alpine
    ```
 
@@ -229,7 +229,7 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
 
 **Qué vas a hacer y por qué:** la app vive en `apps/web` y usa `ui` solo por su puerta de entrada, sin rutas internas.
 
-1. Crea la app con create-vue, la herramienta oficial de Vue (la misma de `npm create vue@latest` del capítulo 0), en una versión fija que funciona con Node 20 y 22. Se lanza **dentro** de `apps/` porque create-vue usa el nombre de la carpeta como nombre del paquete y uno con `/` le haría preguntar. Los comandos son iguales en Windows (PowerShell), macOS y Linux:
+1. Crea la app con create-vue, la herramienta oficial de Vue (la misma de `npm create vue@latest` del capítulo 0), en una versión fija que funciona con Node 20, 22 y 24. Se lanza **dentro** de `apps/` porque create-vue usa el nombre de la carpeta como nombre del paquete y uno con `/` le haría preguntar. Los comandos son iguales en Windows (PowerShell), macOS y Linux:
 
    ```bash
    mkdir apps
@@ -452,7 +452,7 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
 
    ```dockerfile
    # Etapa 1, build: Node.js instala y compila
-   FROM node:22.14.0-alpine AS build
+   FROM node:24.22.0-alpine AS build
    # carpeta de trabajo dentro de la imagen
    WORKDIR /app
    # versión que llega con --build-arg; Vite la publica como VITE_APP_VERSION
@@ -513,7 +513,7 @@ Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8
          - uses: pnpm/action-setup@v4          # primero pnpm: lee la versión de packageManager
          - uses: actions/setup-node@v4         # después Node.js
            with:
-             node-version: 22.14.0
+             node-version: 24.22.0
              cache: pnpm                       # reutiliza descargas; necesita pnpm ya instalado
          - run: pnpm install --frozen-lockfile # instala justo lo del bloqueo
          - run: pnpm test                      # las pruebas del paso 1

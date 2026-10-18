@@ -12,7 +12,7 @@ jobs:
       - uses: pnpm/action-setup@v4          # primero pnpm: lee la versión de packageManager
       - uses: actions/setup-node@v4         # después Node.js
         with:
-          node-version: 22.14.0
+          node-version: 24.22.0
           cache: pnpm                       # reutiliza descargas; necesita pnpm ya instalado
       - run: pnpm install --frozen-lockfile # instala justo lo del bloqueo
       - run: pnpm test                      # las pruebas del paso 1

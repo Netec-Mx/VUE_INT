@@ -35,7 +35,7 @@ Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas d
 
 ## Antes de empezar
 
-- **Node.js 20 o 22** (probado con 22.3), con npm 10. Compruébalo con `node -v`.
+- **Node.js 24 LTS** (probado con 24.22.0), con npm 11. Compruébalo con `node -v`.
 - Google Chrome y Visual Studio Code (con la extensión **Vue (Official)** si la ofrece).
 - Conexión a internet para instalar los paquetes. Nada más: todo el código está en esta guía.
 
@@ -51,7 +51,7 @@ Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas d
    ```
 
    - `--router` agrega Vue Router (capítulo 3) ya conectado a la aplicación; `--bare` deja el proyecto sin páginas de ejemplo. Con las dos opciones create-vue no hace preguntas.
-   - La versión va fija: 3.16.4 crea el proyecto con Vite 6, que funciona en Node 20 y 22. Las versiones más nuevas piden Node 22.18 o superior.
+   - La versión va fija: 3.16.4 crea el proyecto con Vite 6, que funciona en Node 20, 22 y 24. Las versiones más nuevas piden Node 22.18 o superior.
    - `rollup-plugin-visualizer` dibuja el mapa del paquete (tema 6.2). Es lo único que se instala aparte.
 
 2. Abre la carpeta en VS Code (`code .`) y mira lo que trae el proyecto. No hay que borrar nada:

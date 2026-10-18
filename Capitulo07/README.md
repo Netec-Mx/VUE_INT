@@ -46,7 +46,7 @@ Al terminar podrás:
 
 ## Antes de empezar
 
-- **Node.js 20 o 22 en adelante** (`node -v`; probado con 22.3.0 y 24.18.0) y npm (`npm -v`).
+- **Node.js 24 LTS** (`node -v`; probado con 24.22.0 y 24.18.0) y npm (`npm -v`).
 - **Google Chrome**, porque Cypress lo usará en el paso 7.
 - Visual Studio Code con la extensión **Vue (Official)**.
 - Unos 700 MB libres: Cypress descarga su programa la primera vez.

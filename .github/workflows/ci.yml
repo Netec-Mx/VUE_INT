@@ -1,4 +1,4 @@
-name: Validar y Desplegar Aplicación Vue
+name: Validar laboratorios
 
 on:
   push:
@@ -7,27 +7,41 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  ejercicio-resuelto:
+    name: Capítulo ${{ matrix.capitulo }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        capitulo: [ "01", "02", "03", "04", "05", "06", "07" ]
+    defaults:
+      run:
+        working-directory: Capitulo${{ matrix.capitulo }}/ejercicio-resuelto
+    env:
+      CYPRESS_INSTALL_BINARY: 0
     steps:
-      - name: Clonar código
-        uses: actions/checkout@v4
-
-      - name: Configurar Node.js LTS
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.22.0
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Pruebas unitarias (capítulo 7)
+        if: matrix.capitulo == '07'
+        run: npm run test:run
 
-      - name: Instalar y Probar ProjectHub SPA
-        run: |
-          cd projecthub-spa
-          npm install
-          npm run build
-          npm test
-
-      - name: Instalar y Probar Catalogo Pro
-        run: |
-          cd catalogo-pro
-          npm install
-          npm run build
-          npm run test:unit
+  monorrepositorio:
+    name: Capítulo 08
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Capitulo08/ejercicio-resuelto
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.0
+      - run: npm install -g pnpm@9.15.4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build

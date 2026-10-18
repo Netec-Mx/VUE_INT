@@ -1,5 +1,5 @@
 # Etapa 1, build: Node.js instala y compila
-FROM node:22.14.0-alpine AS build
+FROM node:24.22.0-alpine AS build
 # carpeta de trabajo dentro de la imagen
 WORKDIR /app
 # versión que llega con --build-arg; Vite la publica como VITE_APP_VERSION

@@ -38,7 +38,7 @@ Todos se vieron en las diapositivas del capítulo o en capítulos anteriores. Vu
 
 ## Antes de empezar
 
-- **Node.js 20 o 22**, la versión que pide la SUG (Setup Guide, guía de instalación de Netec). Compruébalo con `node -v`.
+- **Node.js 24 LTS** (probado con 24.22.0), la versión que pide la SUG (Setup Guide, guía de instalación de Netec). Compruébalo con `node -v`.
 - Google Chrome y Visual Studio Code con la extensión **Vue (Official)**.
 - Conexión a internet para que `npm` descargue las librerías.
 

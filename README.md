@@ -10,7 +10,7 @@ Laboratorios del curso Vue Intermedio de Netec: consolidar y aplicar conceptos i
 - **Funciona igual en Windows, macOS y Linux.** Los comandos son de `npm`, `npx`, `node`, `git` o `docker`; si alguno cambia según el sistema, la guía muestra las dos variantes.
 - **Laboratorio resuelto:** cada capítulo trae la carpeta `ejercicio-resuelto/` con el proyecto terminado, para comparar al final o si te atascas.
 
-Antes de empezar, prepara el equipo con la guía de instalación del curso (SUG, Setup Guide): Node.js 22, Git, Google Chrome, Visual Studio Code con la extensión Vue (Official) y, para la práctica 8, Docker.
+Antes de empezar, prepara el equipo con la guía de instalación del curso (SUG, Setup Guide): Node.js 24 LTS, Git, Google Chrome, Visual Studio Code con la extensión Vue (Official) y, para la práctica 8, Docker.
 
 ## Lista de laboratorios
 
@@ -35,7 +35,7 @@ CapituloNN/
 
 ## Versiones
 
-Vue 3.5, Vue Router 4, Pinia 3, Vite 6.4, Vitest 3 y Cypress 14. Se usa Vite 6.4 porque funciona con Node.js 20.18 o superior y con Node.js 22.
+Vue 3.5, Vue Router 4, Pinia 3, Vite 6.4, Vitest 3 y Cypress 14. Se usa Vite 6.4, creado con create-vue 3.16.4, porque funciona igual con Node.js 20, 22 y 24; los laboratorios se validaron con Node.js 24.22.0 (la versión estable actual) y Vue 3.5.44.
 
 ## Control de cambios
 

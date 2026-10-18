@@ -34,7 +34,7 @@ Todos se vieron en las diapositivas; entre paréntesis, el capítulo.
 
 ## Antes de empezar
 
-- **Node.js 20 o superior** (el programa que ejecuta JavaScript fuera del navegador); la guía se probó con 22.3.0 en Windows y 24.18.0 en Linux. Compruébalo con `node -v`.
+- **Node.js 24 LTS** (el programa que ejecuta JavaScript fuera del navegador); la guía se probó con 24.22.0 en Windows y 24.18.0 en Linux. Compruébalo con `node -v`.
 - Google Chrome y Visual Studio Code con la extensión **Vue (Official)**.
 - No necesitas descargar nada del repositorio: todo el código está en esta guía. Las herramientas de Vue para ver cada tienda por dentro ya vienen en el proyecto que crea `create-vue`; no hace falta instalar extensiones en Chrome.
 

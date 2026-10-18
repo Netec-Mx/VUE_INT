@@ -31,7 +31,7 @@ Todos se vieron en las diapositivas del capítulo 2, salvo el que se indica:
 
 ## Antes de empezar
 
-- **Node.js 20 o 22** (el programa que ejecuta JavaScript fuera del navegador). Compruébalo con `node -v`: debe empezar por `v20.` o `v22.`.
+- **Node.js 24 LTS** (el programa que ejecuta JavaScript fuera del navegador; la versión estable actual, probada con 24.22.0). Compruébalo con `node -v`: debe empezar por `v24.`.
 - Google Chrome y Visual Studio Code. Si VS Code ofrece la extensión **Vue (Official)**, acéptala.
 - No necesitas el laboratorio 1 ni descargar nada: el proyecto se crea desde cero.
 

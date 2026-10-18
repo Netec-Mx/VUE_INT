@@ -49,7 +49,7 @@ Tres piezas pequeñas que aparecen en el código: `__typename` es el campo con e
 
 ## Antes de empezar
 
-- **Node.js 20.18 o 22.11**, los de la guía de instalación. Compruébalo con `node -v`.
+- **Node.js 24 LTS** (probado con 24.22.0), el de la guía de instalación. Compruébalo con `node -v`.
 - Google Chrome y Visual Studio Code.
 - Conexión a internet para descargar los paquetes.
 
