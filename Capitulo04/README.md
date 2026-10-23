@@ -1,1108 +1,778 @@
-# 4 Practica: diseñar y aplicar una arquitectura de stores para una aplicación compleja
+<!-- lang: es-CO -->
+# Práctica 4.4: diseñar y aplicar una arquitectura de stores para una aplicación compleja
 
-## Metadatos
-
-| Propiedad | Valor |
+| Campo | Valor |
 |---|---|
 | Duración | 46 minutos |
-| Complejidad | Difícil |
+| Complejidad | Media |
 | Nivel de Bloom | Crear |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio evolucionará la SPA `projecthub-spa`, creada en laboratorios anteriores, hacia una arquitectura modular de estado global basada en Pinia. Separará los dominios de autenticación, proyectos, tareas, interfaz y estado de operaciones, incorporando persistencia selectiva y trazabilidad durante el desarrollo.
+Vas a repartir el estado de una aplicación de proyectos y tareas, **ProjectHub**, en cinco tiendas de Pinia, una por tema: sesión, proyectos, tareas, interfaz y estado de la API (la interfaz de programación por la que la aplicación le pide datos al servidor). Al terminar, el tema, el filtro y una sesión mínima sobreviven a la recarga sin guardar el token, y cada carga y cada error quedan en un solo lugar.
 
-La solución resultante evitará fuentes de verdad duplicadas, mantendrá los tokens de demostración fuera de `localStorage` y preparará la aplicación para la integración posterior con clientes REST, GraphQL, caché y manejo centralizado de errores.
+**Así se ve al terminar:** un encabezado con tu nombre y el botón **Salir**; debajo, los botones **Cambiar tema** y **Simular error**, el filtro **Mostrar**, la línea `Semáforo de proyectos: success - Errores registrados: 0` y dos proyectos con sus tareas para marcar.
 
-## Objetivos de aprendizaje
+## Objetivos
 
-Al completar el laboratorio, podrá:
+Al terminar podrás:
 
-- [ ] Diseñar stores Pinia independientes para autenticación, proyectos, tareas, interfaz y estado de API.
-- [ ] Implementar stores de configuración (*setup stores*) con estado, selectores derivados y acciones asíncronas.
-- [ ] Persistir de forma selectiva tema, filtros y sesión mínima sin almacenar tokens ni estados transitorios.
-- [ ] Crear plugins de Pinia para persistencia y auditoría de acciones y mutaciones.
-- [ ] Refactorizar guards de Vue Router y composables para que consulten los stores globales.
+- Diseñar tiendas Pinia independientes para sesión, proyectos, tareas, interfaz y estado de la API.
+- Escribir tiendas de composición (Setup Stores) con datos, getters y actions asíncronas.
+- Guardar cada proyecto y cada tarea una sola vez (`byId` y `allIds`).
+- Escribir un plugin que guarda solo lo que cada tienda declara, nunca credenciales, y otro que audita las actions solo en desarrollo.
 
-## Prerrequisitos
+## Conceptos que usas
 
-### Conocimientos requeridos
+Todos se vieron en las diapositivas; entre paréntesis, el capítulo.
 
-- Haber completado el laboratorio `03-00-01`, incluyendo autenticación simulada, rutas protegidas y carga perezosa.
-- Comprender `ref`, `computed`, `watch`, Composition API y `script setup`.
-- Diferenciar estado local de componente, estado compartido mediante composables y estado global.
-- Conocer el uso básico de `defineStore`, `storeToRefs`, getters y acciones de Pinia.
+- `ref`, `computed`, `watch` y `onMounted` (1). `script setup` y composables que empiezan por `use` (2).
+- `beforeEach`, `meta.requiresAuth`, `query.redirect` y la carga perezosa con `() => import(...)` (3).
+- `defineStore` en sus dos estilos, `storeToRefs`, `$patch`, `$subscribe`, `$onAction`, `pinia.use`, `localStorage` e `import.meta.env.DEV` (4).
 
-### Acceso y software requerido
+**Repaso del capítulo 3:** en sus diapositivas, la guardia tenía `const haySesion = false // fijo por ahora`. Hoy la cambias por la tienda de sesión real.
 
-| Recurso | Requisito |
-|---|---|
-| Directorio de trabajo | `/workspace/vue-intermedio-labs` |
-| Equivalente en Windows | `C:\workspace\vue-intermedio-labs` |
-| Aplicación | `projecthub-spa` |
-| Node.js | 22.14.0 |
-| npm | 10.9.2 |
-| Vue | 3.5.13 |
-| Pinia | 3.0.1 |
-| Vue Router | 4.5.0 |
-| Navegador | Google Chrome instalado |
-| Puerto Vite | `5173` |
-| Puerto reservado | `3000`, no usar durante este laboratorio |
+## Antes de empezar
 
-> El endpoint REST simulado debe mantenerse en `http://127.0.0.1:5173/api`. MSW intercepta las solicitudes en el navegador; no inicie una API adicional.
+- **Node.js 24 LTS** (el programa que ejecuta JavaScript fuera del navegador); la guía se probó con 24.22.0 en Windows y 24.18.0 en Linux. Compruébalo con `node -v`.
+- Google Chrome y Visual Studio Code con la extensión **Vue (Official)**.
+- No necesitas descargar nada del repositorio: todo el código está en esta guía. Las herramientas de Vue para ver cada tienda por dentro ya vienen en el proyecto que crea `create-vue`; no hace falta instalar extensiones en Chrome.
 
-## Entorno del laboratorio
+## Preparación (6 minutos)
 
-1. Abra una terminal y acceda al directorio obligatorio:
+1. Abre una terminal donde guardes tus prácticas y crea una carpeta vacía para esta. Los comandos son iguales en Windows, macOS y Linux:
 
    ```bash
-   cd /workspace/vue-intermedio-labs/projecthub-spa
+   mkdir labs-vue-cap04
+   cd labs-vue-cap04
    ```
 
-   En Windows PowerShell:
-
-   ```powershell
-   cd C:\workspace\vue-intermedio-labs\projecthub-spa
-   ```
-
-2. Confirme las versiones principales:
+2. Crea el proyecto con `create-vue`, la herramienta oficial de Vue (la misma de `npm create vue@latest`), ya con Vue Router y Pinia, e instala las dependencias. La versión queda fijada en 3.16.4 porque trae Vite 6, que corre con el Node.js de la guía de instalación; las opciones evitan las preguntas del asistente:
 
    ```bash
-   node --version
-   npm --version
-   npm list vue pinia vue-router
+   npx --yes create-vue@3.16.4 projecthub --bare --router --pinia
+   cd projecthub
+   npm install
    ```
 
-3. Si Pinia no está instalado, instale exactamente la versión requerida:
+   `--bare` deja un `App.vue` mínimo, sin componentes de ejemplo; `--router` agrega Vue Router y `--pinia` agrega Pinia.
 
-   ```bash
-   npm install pinia@3.0.1
-   ```
+3. Abre la carpeta en el editor con `code .` y mira lo que creó `create-vue`:
 
-4. Cree los directorios para stores y plugins:
-
-   ```bash
-   mkdir -p src/stores src/plugins
-   ```
-
-5. Inicie la aplicación con el puerto y host obligatorios:
-
-   ```bash
-   npm run dev -- --host 127.0.0.1 --port 5173
-   ```
-
-6. Abra la aplicación en Chrome:
-
-   ```text
-   http://127.0.0.1:5173
-   ```
-
-## Procedimiento paso a paso
-
-### Paso 1. Inventariar el estado y definir límites de dominio
-
-**Objetivo:** identificar qué estado debe migrarse a Pinia y evitar crear una store global monolítica.
-
-**Instrucciones:**
-
-1. Revise los composables, vistas y guards existentes del laboratorio anterior.
-2. Clasifique el estado según la siguiente tabla:
-
-   | Dominio | Store | Responsabilidad |
+   | Archivo | Qué es | Qué haces con él |
    |---|---|---|
-   | Sesión y autorización | `useAuthStore` | Usuario, roles, sesión mínima, renovación y cierre de sesión. |
-   | Proyectos | `useProjectsStore` | Entidades de proyectos, carga y selector de proyecto actual. |
-   | Tareas | `useTasksStore` | Tareas normalizadas por ID y relación con proyectos. |
-   | Interfaz | `useUiStore` | Tema, filtros, notificaciones y estado visual global. |
-   | Operaciones HTTP | `useApiStatusStore` | Operaciones activas y errores centralizados. |
+   | `src/main.js` | Crea la aplicación e instala Pinia y el enrutador | Lo reemplazas en el paso 2 |
+   | `src/App.vue` | Componente raíz con un título de prueba | Lo reemplazas en el paso 2 |
+   | `src/router/index.js` | Enrutador sin rutas | Lo reemplazas en el paso 2 |
+   | `src/stores/counter.js` | Tienda de ejemplo (un contador) | **Bórralo ahora**: no se usa |
+   | `vite.config.js` | Configuración de Vite: el atajo `@` apunta a `src/` y activa Vue DevTools | No lo tocas |
+   | `index.html` | Página que carga la aplicación | Le cambias el idioma y el título (punto 4) |
 
-3. Mantenga como estado local de componente elementos tales como:
-   - El contenido temporal de un campo de formulario.
-   - La apertura de un menú usado por una sola vista.
-   - La validación local de un formulario antes de enviarlo.
+4. En `index.html` cambia `lang=""` por `lang="es"` (el lector de pantalla leerá en español) y `<title>Vite App</title>` por `<title>ProjectHub</title>`.
 
-4. No conserve en composables una copia reactiva del usuario, proyectos o filtros globales. Los composables restantes deben actuar como adaptadores de presentación y consultar stores.
+**Qué debes ver:** `added ... packages` sin errores; en `package.json`, `pinia` y `vue-router` dentro de `dependencies`, y en `src/` quedan `App.vue`, `main.js`, `router/index.js` y la carpeta `stores` vacía.
 
-**Resultado esperado:**
+En esta guía, `@/` es el atajo a `src/`: `@/stores/auth.js` es `src/stores/auth.js` desde cualquier carpeta. Entre archivos de la misma carpeta se usa `./`.
 
-Existe una decisión clara sobre la fuente de verdad de cada tipo de dato. No se crea una única store llamada `app` o `global`.
+## Paso 1. Diseñar las cinco tiendas en papel (1 minuto)
 
-**Verificación:**
+**Qué vas a hacer y por qué:** antes de escribir una tienda se decide qué dato vive en ella y si debe sobrevivir a la recarga. Es el ejercicio del tema 4.2 y evita que una tienda se vuelva el cajón donde cae lo que no encontró lugar.
 
-Compruebe que puede responder estas preguntas:
+**Primero, predice:** copia la tabla en una hoja y llena la última columna con **sí** o **no** y una razón de una línea.
 
-- ¿Dónde vive el tema? En `useUiStore`.
-- ¿Dónde vive el usuario autenticado? En `useAuthStore`.
-- ¿Dónde se registra un error de carga? En `useApiStatusStore`.
-- ¿Dónde se resuelve una tarea por identificador? En `useTasksStore`.
+| Tienda | Archivo | Datos | ¿Se guarda al recargar? |
+|---|---|---|---|
+| Sesión | `stores/auth.js` | `user` (nombre y roles), `token` | |
+| Interfaz | `stores/ui.js` | `theme`, `filter`, `toast` (aviso) | |
+| Estado de la API | `stores/apiStatus.js` | `pending`, `errors` | |
+| Proyectos | `stores/projects.js` | `byId`, `allIds`, `status` | |
+| Tareas | `stores/tasks.js` | `byId`, `allIds` | |
 
----
+<details>
+<summary>Compara con la respuesta</summary>
 
-### Paso 2. Registrar Pinia y los plugins globales
+Se guardan `user`, `theme` y `filter`: los eligió la persona. No se guardan `token` (una credencial; en producción va en una cookie HttpOnly), `toast`, `pending` y `errors` (describen un momento) ni proyectos y tareas (los trae la API). Las dependencias van en una sola dirección: `projects` y `tasks` usan `apiStatus`, y `apiStatus` y `tasks` usan `ui`. `ui` no usa ninguna.
 
-**Objetivo:** crear una instancia de Pinia y registrar los plugins antes de montar la aplicación.
+</details>
 
-**Instrucciones:**
+## Paso 2. Pinia, la tienda de sesión y la guardia (9 minutos)
 
-1. Cree el archivo `src/plugins/piniaPersistence.js`:
+**Qué vas a hacer y por qué:** conectas Pinia a la aplicación y enlazas la guardia del capítulo 3 a una tienda de sesión. La tienda se escribe como función (tienda de composición): `ref` hace de dato, `computed` de getter y cada función de action.
+
+1. Crea `src/api.js`. Cópialo tal cual, no es el tema de hoy:
 
    ```js
-   function selectPaths(source, paths) {
-     return paths.reduce((result, path) => {
-       if (Object.prototype.hasOwnProperty.call(source, path)) {
-         result[path] = source[path]
-       }
+   // API simulada: cópiala tal cual, no es el tema de hoy. No hay servidor real detrás.
+   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) // espera ms milisegundos
 
-       return result
-     }, {})
-   }
+   const PROJECTS = [
+     { id: 'p1', name: 'Sitio web' },
+     { id: 'p2', name: 'App móvil' },
+   ]
 
-   export function piniaPersistence({ store, options }) {
-     const persist = options.persist
+   const TASKS = [
+     { id: 't1', projectId: 'p1', title: 'Diseñar la portada', done: true },
+     { id: 't2', projectId: 'p1', title: 'Publicar el sitio', done: false },
+     { id: 't3', projectId: 'p2', title: 'Pantalla de inicio', done: false },
+     { id: 't4', projectId: 'p2', title: 'Pruebas en Android', done: false },
+   ]
 
-     if (!persist) {
-       return
-     }
-
-     const config = persist === true ? {} : persist
-     const key = config.key ?? `projecthub:${store.$id}`
-     const paths = config.paths ?? Object.keys(store.$state)
-
-     try {
-       const savedState = localStorage.getItem(key)
-
-       if (savedState) {
-         store.$patch(JSON.parse(savedState))
-       }
-     } catch (error) {
-       console.warn(`[persistencia] No se pudo restaurar ${store.$id}`, error)
-       localStorage.removeItem(key)
-     }
-
-     store.$subscribe(
-       (_mutation, state) => {
-         try {
-           const stateToPersist = selectPaths(state, paths)
-           localStorage.setItem(key, JSON.stringify(stateToPersist))
-         } catch (error) {
-           console.warn(`[persistencia] No se pudo guardar ${store.$id}`, error)
-         }
-       },
-       { detached: true },
-     )
+   export const api = {
+     async signIn(name) {
+       await wait(300)
+       if (!name.trim()) throw new Error('Escribe tu nombre para entrar')
+       return { user: { name: name.trim(), roles: ['editor'] }, token: `demo-${Date.now()}` }
+     },
+     async getProjects(fail = false) {
+       await wait(400)
+       if (fail) throw new Error('el servidor respondió 500')
+       return PROJECTS.map((project) => ({ ...project })) // copias: la recarga en caliente no duplica datos
+     },
+     async getTasks() {
+       await wait(300)
+       return TASKS.map((task) => ({ ...task }))
+     },
    }
    ```
 
-2. Cree el archivo `src/plugins/piniaAudit.js`:
+2. Reemplaza todo `src/main.js`. El de `create-vue` ya instala Pinia y el enrutador; este guarda Pinia en una variable, porque en los pasos 4 y 5 le registrarás plugins:
 
    ```js
-   export function piniaAudit({ store }) {
-     store.$onAction(({ name, args, after, onError }) => {
-       console.info(`[pinia:action] ${store.$id}.${name}`, { args })
+   import { createApp } from 'vue'                      // crea la aplicación
+   import { createPinia } from 'pinia'                  // crea Pinia, el gestor de tiendas
+   import App from './App.vue'                          // componente principal
+   import router from './router'                        // enrutador: Vite abre src/router/index.js
 
-       after((result) => {
-         console.info(`[pinia:success] ${store.$id}.${name}`, { result })
-       })
+   const pinia = createPinia()                          // la instancia de Pinia, en una variable para hablarle
 
-       onError((error) => {
-         console.error(`[pinia:error] ${store.$id}.${name}`, error)
-       })
-     })
-
-     store.$subscribe((mutation) => {
-       console.info(`[pinia:mutation] ${store.$id}`, {
-         type: mutation.type,
-         payload: mutation.payload,
-       })
-     })
-   }
+   createApp(App)                                       // crea la aplicación con App como raíz
+     .use(pinia)                                        // primero Pinia: la guardia del enrutador usa una tienda
+     .use(router)                                       // después el enrutador
+     .mount('#app')                                     // la dibuja dentro de <div id="app">
    ```
 
-3. Actualice `src/main.js` o `src/main.ts`:
+3. Crea `src/stores/auth.js`. Fíjate en el tercer argumento de `defineStore`: la opción `persist` no hace nada hasta el paso 4.
 
    ```js
-   import { createApp } from 'vue'
-   import { createPinia } from 'pinia'
-   import App from './App.vue'
-   import router from './router'
-   import { piniaPersistence } from './plugins/piniaPersistence'
-   import { piniaAudit } from './plugins/piniaAudit'
+   import { defineStore } from 'pinia'          // crea tiendas
+   import { computed, ref } from 'vue'          // piezas del capítulo 1
+   import { api } from '@/api.js'               // API simulada (@ = src)
 
-   const app = createApp(App)
-   const pinia = createPinia()
+   // Tienda de composición: una función que arma la tienda con ref, computed y funciones
+   export const useAuthStore = defineStore('auth', () => {
+     const user = ref(null)                     // sesión mínima: { name, roles }; null = sin sesión
+     const token = ref(null)                    // credencial: vive solo en memoria, nunca se guarda
+     const isAuthenticated = computed(() => user.value !== null) // getter: ¿hay sesión?
 
-   pinia.use(piniaPersistence)
-
-   if (import.meta.env.DEV) {
-     pinia.use(piniaAudit)
-   }
-
-   app.use(pinia)
-   app.use(router)
-   app.mount('#app')
-   ```
-
-4. Verifique que MSW continúa inicializándose exclusivamente en desarrollo, según la configuración heredada:
-
-   ```js
-   if (import.meta.env.DEV) {
-     const { worker } = await import('./mocks/browser')
-     await worker.start()
-   }
-   ```
-
-**Resultado esperado:**
-
-Pinia queda disponible para componentes, guards y stores. El plugin de auditoría solo escribe mensajes en desarrollo.
-
-**Verificación:**
-
-Abra DevTools de Chrome, pestaña **Console**. No debe observar errores relacionados con `getActivePinia()` al navegar por la aplicación.
-
----
-
-### Paso 3. Crear la store de estado de API
-
-**Objetivo:** centralizar operaciones en curso y errores para que las stores de dominio no dupliquen lógica transversal.
-
-**Instrucciones:**
-
-1. Cree `src/stores/apiStatus.js`:
-
-   ```js
-   import { computed, ref } from 'vue'
-   import { defineStore } from 'pinia'
-
-   export const useApiStatusStore = defineStore('apiStatus', () => {
-     const pendingOperations = ref([])
-     const errors = ref([])
-
-     const isLoading = computed(() => pendingOperations.value.length > 0)
-
-     function start(operation) {
-       if (!pendingOperations.value.includes(operation)) {
-         pendingOperations.value.push(operation)
-       }
+     async function signIn(name) {              // action asíncrona: espera a la API
+       const session = await api.signIn(name)   // si el nombre está vacío, lanza un error
+       user.value = session.user                // guarda quién entró y sus roles
+       token.value = session.token              // el token queda solo en memoria
      }
 
-     function finish(operation) {
-       pendingOperations.value = pendingOperations.value.filter(
-         (item) => item !== operation,
-       )
+     function signOut() {                       // action: cierra la sesión
+       user.value = null                        // sin usuario...
+       token.value = null                       // ...y sin token
      }
 
-     function reportError({ operation, message, cause = null }) {
-       errors.value.unshift({
-         id: crypto.randomUUID(),
-         operation,
-         message,
-         cause,
-         createdAt: new Date().toISOString(),
-       })
-     }
-
-     function clearError(errorId) {
-       errors.value = errors.value.filter((error) => error.id !== errorId)
-     }
-
-     function clearErrors() {
-       errors.value = []
-     }
-
-     return {
-       pendingOperations,
-       errors,
-       isLoading,
-       start,
-       finish,
-       reportError,
-       clearError,
-       clearErrors,
-     }
+     return { user, token, isAuthenticated, signIn, signOut } // lo que ven los componentes
+   }, {
+     // persist es una opción NUESTRA: Pinia la ignora; la leerá el plugin del paso 4
+     persist: { key: 'projecthub:auth:v1', paths: ['user'] }  // solo user; token queda fuera
    })
    ```
 
-2. No configure persistencia para esta store. Las operaciones y errores son transitorios.
-
-3. Mantenga los nombres de operación consistentes, por ejemplo:
-   - `auth.signIn`
-   - `auth.refreshSession`
-   - `projects.loadAll`
-   - `tasks.loadByProject`
-
-**Resultado esperado:**
-
-La aplicación dispone de una fuente única para indicar carga global y registrar fallos de operaciones.
-
-**Verificación:**
-
-En Vue DevTools, tras ejecutar una acción asíncrona, confirme que `pendingOperations` vuelve a ser un arreglo vacío cuando finaliza la operación.
-
----
-
-### Paso 4. Implementar la store de interfaz con persistencia selectiva
-
-**Objetivo:** administrar preferencias y notificaciones globales sin persistir datos temporales.
-
-**Instrucciones:**
-
-1. Cree `src/stores/ui.js`:
+4. Reemplaza todo `src/router/index.js` (repaso del capítulo 3: rutas, carga perezosa y guardia):
 
    ```js
-   import { computed, ref } from 'vue'
-   import { defineStore } from 'pinia'
+   import { createRouter, createWebHistory } from 'vue-router' // repaso del capítulo 3
+   import { useAuthStore } from '@/stores/auth.js'             // la tienda de sesión
 
-   export const useUiStore = defineStore(
-     'ui',
-     () => {
-       const theme = ref('light')
-       const projectFilters = ref({
-         query: '',
-         status: 'all',
-         ownerId: 'all',
-       })
-       const notifications = ref([])
-
-       const hasNotifications = computed(
-         () => notifications.value.length > 0,
-       )
-
-       function setTheme(nextTheme) {
-         theme.value = nextTheme === 'dark' ? 'dark' : 'light'
-         document.documentElement.dataset.theme = theme.value
-       }
-
-       function setProjectFilters(filters) {
-         projectFilters.value = {
-           ...projectFilters.value,
-           ...filters,
-         }
-       }
-
-       function resetProjectFilters() {
-         projectFilters.value = {
-           query: '',
-           status: 'all',
-           ownerId: 'all',
-         }
-       }
-
-       function notify({ message, type = 'info' }) {
-         notifications.value.unshift({
-           id: crypto.randomUUID(),
-           message,
-           type,
-           createdAt: new Date().toISOString(),
-         })
-       }
-
-       function dismissNotification(notificationId) {
-         notifications.value = notifications.value.filter(
-           (notification) => notification.id !== notificationId,
-         )
-       }
-
-       return {
-         theme,
-         projectFilters,
-         notifications,
-         hasNotifications,
-         setTheme,
-         setProjectFilters,
-         resetProjectFilters,
-         notify,
-         dismissNotification,
-       }
-     },
-     {
-       persist: {
-         key: 'projecthub:ui',
-         paths: ['theme', 'projectFilters'],
+   const router = createRouter({
+     history: createWebHistory(import.meta.env.BASE_URL),      // direcciones limpias, sin #
+     routes: [
+       { path: '/', redirect: '/proyectos' },                  // la raíz lleva a proyectos
+       { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') }, // carga perezosa
+       {
+         path: '/proyectos',
+         component: () => import('@/views/ProjectsView.vue'),  // se descarga solo al visitarla
+         meta: { requiresAuth: true },                         // exige sesión
        },
-     },
-   )
+     ],
+   })
+
+   router.beforeEach((to) => {                                 // antes de cada navegación
+     const auth = useAuthStore()                               // DENTRO de la guardia: Pinia ya está instalada
+     if (to.meta.requiresAuth && !auth.isAuthenticated) {      // ¿pide sesión y no la hay?
+       return { name: 'login', query: { redirect: to.fullPath } } // al formulario, guardando el destino
+     }
+     return true                                               // si no, adelante
+   })
+
+   export default router                                       // main.js lo instala
    ```
 
-2. En `App.vue`, aplique el tema restaurado cuando se cargue la aplicación:
+5. Crea `src/views/LoginView.vue`. El nombre escrito es estado **local**: solo lo usa este formulario, por eso no va a una tienda.
 
    ```vue
    <script setup>
-   import { onMounted } from 'vue'
-   import { useUiStore } from '@/stores/ui'
+   import { ref } from 'vue'                         // estado local del formulario
+   import { useRoute, useRouter } from 'vue-router'  // la ruta actual y el enrutador
+   import { useAuthStore } from '@/stores/auth.js'   // la tienda de sesión
 
-   const uiStore = useUiStore()
+   const auth = useAuthStore()                       // estado global: la sesión
+   const route = useRoute()                          // para leer ?redirect=...
+   const router = useRouter()                        // para navegar al entrar
+   const name = ref('')                              // estado LOCAL: solo lo usa este formulario
+   const error = ref('')                             // también local: el mensaje del formulario
 
-   onMounted(() => {
-     document.documentElement.dataset.theme = uiStore.theme
-   })
+   async function submit() {
+     error.value = ''                                // borra el mensaje anterior
+     try {
+       await auth.signIn(name.value)                 // la tienda habla con la API
+       router.push(route.query.redirect ?? '/proyectos') // vuelve adonde quería ir (capítulo 3)
+     } catch (e) {
+       error.value = e.message                       // muestra por qué no pudo entrar
+     }
+   }
    </script>
 
    <template>
-     <RouterView />
+     <form @submit.prevent="submit">
+       <h2>Iniciar sesión</h2>
+       <label>Nombre <input v-model="name" autocomplete="username" /></label>
+       <button type="submit">Entrar</button>
+       <p v-if="error" role="alert">{{ error }}</p>
+     </form>
    </template>
    ```
 
-3. No incluya `notifications` en `paths`. Las notificaciones deben desaparecer al recargar la página.
+6. Crea `src/views/ProjectsView.vue` con esta versión provisional; en el paso 3 la reemplazas completa:
 
-**Resultado esperado:**
-
-El tema y filtros sobreviven a una recarga; las notificaciones no.
-
-**Verificación:**
-
-En Chrome DevTools, ejecute:
-
-```js
-JSON.parse(localStorage.getItem('projecthub:ui'))
-```
-
-La salida debe incluir `theme` y `projectFilters`, pero no `notifications`.
-
----
-
-### Paso 5. Implementar la store de autenticación
-
-**Objetivo:** centralizar sesión, roles, renovación simulada y efectos secundarios de autenticación.
-
-**Instrucciones:**
-
-1. Cree `src/stores/auth.js`:
-
-   ```js
-   import { computed, ref } from 'vue'
-   import { defineStore } from 'pinia'
-   import { useApiStatusStore } from './apiStatus'
-   import { useUiStore } from './ui'
-
-   export const useAuthStore = defineStore(
-     'auth',
-     () => {
-       const user = ref(null)
-       const roles = ref([])
-       const sessionExpiresAt = ref(null)
-
-       const isAuthenticated = computed(() => Boolean(user.value))
-       const isAdmin = computed(() => roles.value.includes('admin'))
-
-       function setSession(session) {
-         user.value = {
-           id: session.user.id,
-           name: session.user.name,
-           email: session.user.email,
-         }
-         roles.value = session.roles ?? []
-         sessionExpiresAt.value = session.expiresAt ?? null
-       }
-
-       async function signIn(credentials) {
-         const apiStatusStore = useApiStatusStore()
-         const uiStore = useUiStore()
-
-         apiStatusStore.start('auth.signIn')
-
-         try {
-           const response = await fetch('/api/session', {
-             method: 'POST',
-             headers: {
-               'Content-Type': 'application/json',
-             },
-             body: JSON.stringify(credentials),
-           })
-
-           if (!response.ok) {
-             throw new Error('Las credenciales no son válidas.')
-           }
-
-           const session = await response.json()
-           setSession(session)
-
-           uiStore.notify({
-             type: 'success',
-             message: `Bienvenido, ${user.value.name}.`,
-           })
-         } catch (error) {
-           apiStatusStore.reportError({
-             operation: 'auth.signIn',
-             message: error.message,
-             cause: error,
-           })
-           throw error
-         } finally {
-           apiStatusStore.finish('auth.signIn')
-         }
-       }
-
-       async function refreshSession() {
-         if (!isAuthenticated.value) {
-           return
-         }
-
-         const apiStatusStore = useApiStatusStore()
-         apiStatusStore.start('auth.refreshSession')
-
-         try {
-           sessionExpiresAt.value = new Date(
-             Date.now() + 30 * 60 * 1000,
-           ).toISOString()
-         } finally {
-           apiStatusStore.finish('auth.refreshSession')
-         }
-       }
-
-       function signOut() {
-         user.value = null
-         roles.value = []
-         sessionExpiresAt.value = null
-
-         useUiStore().notify({
-           type: 'info',
-           message: 'La sesión se cerró correctamente.',
-         })
-       }
-
-       function hasRole(role) {
-         return roles.value.includes(role)
-       }
-
-       return {
-         user,
-         roles,
-         sessionExpiresAt,
-         isAuthenticated,
-         isAdmin,
-         setSession,
-         signIn,
-         refreshSession,
-         signOut,
-         hasRole,
-       }
-     },
-     {
-       persist: {
-         key: 'projecthub:auth',
-         paths: ['user', 'roles', 'sessionExpiresAt'],
-       },
-     },
-   )
+   ```vue
+   <!-- Versión provisional: en el paso 3 la reemplazas completa -->
+   <template>
+     <h2>Proyectos</h2>
+   </template>
    ```
 
-2. Confirme que la respuesta simulada de MSW para `POST /api/session` tiene una estructura compatible:
-
-   ```json
-   {
-     "user": {
-       "id": "u-001",
-       "name": "Ada Lovelace",
-       "email": "ada@example.test"
-     },
-     "roles": ["member"],
-     "expiresAt": "2026-08-20T12:00:00.000Z"
-   }
-   ```
-
-3. No persista tokens de demostración, cabeceras `Authorization`, estados `loading` ni mensajes de error.
-
-**Resultado esperado:**
-
-La sesión mínima se conserva tras recargar, pero el almacenamiento local no contiene secretos de autenticación.
-
-**Verificación:**
-
-Ejecute en la consola del navegador:
-
-```js
-JSON.parse(localStorage.getItem('projecthub:auth'))
-```
-
-Confirme que solo aparecen `user`, `roles` y `sessionExpiresAt`.
-
----
-
-### Paso 6. Crear stores normalizadas de proyectos y tareas
-
-**Objetivo:** gestionar entidades de dominio de forma escalable, evitando copias de tareas dentro de cada proyecto.
-
-**Instrucciones:**
-
-1. Cree `src/stores/projects.js`:
-
-   ```js
-   import { computed, ref } from 'vue'
-   import { defineStore } from 'pinia'
-   import { useApiStatusStore } from './apiStatus'
-   import { useUiStore } from './ui'
-
-   export const useProjectsStore = defineStore('projects', () => {
-     const byId = ref({})
-     const allIds = ref([])
-     const selectedProjectId = ref(null)
-
-     const projects = computed(() =>
-       allIds.value.map((id) => byId.value[id]).filter(Boolean),
-     )
-
-     const selectedProject = computed(
-       () => byId.value[selectedProjectId.value] ?? null,
-     )
-
-     function upsertMany(items) {
-       items.forEach((project) => {
-         byId.value[project.id] = project
-
-         if (!allIds.value.includes(project.id)) {
-           allIds.value.push(project.id)
-         }
-       })
-     }
-
-     function selectProject(projectId) {
-       selectedProjectId.value = projectId
-     }
-
-     async function loadAll() {
-       const apiStatusStore = useApiStatusStore()
-       const uiStore = useUiStore()
-
-       apiStatusStore.start('projects.loadAll')
-
-       try {
-         const response = await fetch('/api/projects')
-
-         if (!response.ok) {
-           throw new Error('No se pudieron cargar los proyectos.')
-         }
-
-         upsertMany(await response.json())
-       } catch (error) {
-         apiStatusStore.reportError({
-           operation: 'projects.loadAll',
-           message: error.message,
-           cause: error,
-         })
-
-         uiStore.notify({
-           type: 'error',
-           message: 'No fue posible cargar los proyectos.',
-         })
-       } finally {
-         apiStatusStore.finish('projects.loadAll')
-       }
-     }
-
-     return {
-       byId,
-       allIds,
-       selectedProjectId,
-       projects,
-       selectedProject,
-       upsertMany,
-       selectProject,
-       loadAll,
-     }
-   })
-   ```
-
-2. Cree `src/stores/tasks.js`:
-
-   ```js
-   import { computed, ref } from 'vue'
-   import { defineStore } from 'pinia'
-   import { useApiStatusStore } from './apiStatus'
-
-   export const useTasksStore = defineStore('tasks', () => {
-     const byId = ref({})
-     const idsByProjectId = ref({})
-
-     const totalTasks = computed(() => Object.keys(byId.value).length)
-
-     function upsertMany(tasks) {
-       tasks.forEach((task) => {
-         byId.value[task.id] = task
-
-         const projectTaskIds = idsByProjectId.value[task.projectId] ?? []
-
-         if (!projectTaskIds.includes(task.id)) {
-           idsByProjectId.value[task.projectId] = [
-             ...projectTaskIds,
-             task.id,
-           ]
-         }
-       })
-     }
-
-     function tasksForProject(projectId) {
-       return (idsByProjectId.value[projectId] ?? [])
-         .map((taskId) => byId.value[taskId])
-         .filter(Boolean)
-     }
-
-     async function loadByProject(projectId) {
-       const apiStatusStore = useApiStatusStore()
-       apiStatusStore.start('tasks.loadByProject')
-
-       try {
-         const response = await fetch(`/api/projects/${projectId}/tasks`)
-
-         if (!response.ok) {
-           throw new Error('No se pudieron cargar las tareas.')
-         }
-
-         upsertMany(await response.json())
-       } catch (error) {
-         apiStatusStore.reportError({
-           operation: 'tasks.loadByProject',
-           message: error.message,
-           cause: error,
-         })
-       } finally {
-         apiStatusStore.finish('tasks.loadByProject')
-       }
-     }
-
-     return {
-       byId,
-       idsByProjectId,
-       totalTasks,
-       upsertMany,
-       tasksForProject,
-       loadByProject,
-     }
-   })
-   ```
-
-3. Mantenga proyectos y tareas sin persistencia. Los datos de dominio deben recuperarse o invalidarse de forma controlada en sesiones futuras.
-
-**Resultado esperado:**
-
-Los proyectos se almacenan por ID y las tareas se relacionan con proyectos mediante `idsByProjectId`.
-
-**Verificación:**
-
-Después de cargar un proyecto, inspeccione `tasksStore` en Vue DevTools. Debe observar una estructura similar a:
-
-```js
-{
-  byId: {
-    "task-1": { id: "task-1", projectId: "project-1", title: "..." }
-  },
-  idsByProjectId: {
-    "project-1": ["task-1"]
-  }
-}
-```
-
----
-
-### Paso 7. Refactorizar vistas y composables consumidores
-
-**Objetivo:** consumir estado reactivo de Pinia sin perder reactividad al desestructurar.
-
-**Instrucciones:**
-
-1. Actualice una vista de proyectos, por ejemplo `src/views/ProjectsView.vue`:
+7. Reemplaza todo `src/App.vue`:
 
    ```vue
    <script setup>
-   import { computed, onMounted } from 'vue'
-   import { storeToRefs } from 'pinia'
-   import { useProjectsStore } from '@/stores/projects'
-   import { useUiStore } from '@/stores/ui'
+   import { storeToRefs } from 'pinia'              // saca datos de una tienda sin perder la conexión
+   import { useRouter } from 'vue-router'           // para navegar desde código
+   import { useAuthStore } from '@/stores/auth.js'  // la tienda de sesión
 
-   const projectsStore = useProjectsStore()
-   const uiStore = useUiStore()
+   const auth = useAuthStore()                      // la misma tienda que consulta la guardia
+   const { user } = storeToRefs(auth)               // lo que se lee, con storeToRefs
+   const router = useRouter()                       // el enrutador
 
-   const { projects } = storeToRefs(projectsStore)
-   const { projectFilters } = storeToRefs(uiStore)
+   function logout() {
+     auth.signOut()                                 // lo que se llama, directo desde la tienda
+     router.push({ name: 'login' })                 // de vuelta al formulario
+   }
+   </script>
 
-   const filteredProjects = computed(() => {
-     const query = projectFilters.value.query.trim().toLowerCase()
+   <template>
+     <header>
+       <h1>ProjectHub</h1>
+       <p v-if="user">
+         {{ user.name }} ({{ user.roles.join(', ') }})
+         <button type="button" @click="logout">Salir</button>
+       </p>
+     </header>
+     <main>
+       <RouterView />
+     </main>
+   </template>
 
-     return projects.value.filter((project) => {
-       const matchesQuery = project.name.toLowerCase().includes(query)
-       const matchesStatus =
-         projectFilters.value.status === 'all' ||
-         project.status === projectFilters.value.status
+   <style>
+   /* Estilos: cópialos tal cual, no son el tema de hoy */
+   :root { font-family: system-ui, sans-serif; background: #ffffff; color: #1a1a1a; }
+   :root[data-theme='dark'] { background: #1a1a1a; color: #f2f2f2; }
+   body { margin: 0 auto; max-width: 720px; padding: 1rem; }
+   [role='alert'] { border: 2px solid #b00020; padding: 0.5rem; }
+   </style>
+   ```
 
-       return matchesQuery && matchesStatus
-     })
+8. Arranca el servidor (este laboratorio usa el puerto 5174) y abre `http://localhost:5174/proyectos` en Chrome. `npx vite` ejecuta el Vite instalado en el proyecto, igual que `npm run dev`, y recibe el puerto sin el `--` que PowerShell se come:
+
+   ```bash
+   npx vite --port 5174
+   ```
+
+**Primero, predice:** sin sesión, ¿qué dirección verás al abrir `/proyectos`?
+
+**Qué debes ver:** la guardia te lleva a `/login?redirect=/proyectos`. Pulsa **Entrar** con el nombre vacío: aparece `Escribe tu nombre para entrar`. Escribe `Ana` y pulsa **Entrar**: llegas a **Proyectos** y el encabezado dice `Ana (editor)`.
+
+**Predice otra vez:** si recargas con `F5`, ¿sigues dentro? Hazlo. Vuelves al formulario: la tienda vive en memoria y la recarga la borra. El paso 4 lo resuelve.
+
+## Paso 3. Tiendas por dominio, normalizadas, con la carga y los errores en un solo lugar (14 minutos)
+
+**Qué vas a hacer y por qué:** creas las otras cuatro tiendas. Proyectos y tareas se guardan **normalizados**: cada elemento una sola vez en `byId` (un objeto cuyo índice es el id) y el orden en `allIds`. Toda llamada a la API pasa por `apiStatus.track`, que cuenta las peticiones en curso y anota los errores.
+
+1. Crea `src/stores/ui.js`. El `watch` es un efecto secundario: aplica el tema a la página cada vez que cambia.
+
+   ```js
+   import { defineStore } from 'pinia'          // crea tiendas
+   import { ref, watch } from 'vue'             // piezas del capítulo 1
+
+   export const useUiStore = defineStore('ui', () => {
+     const theme = ref('light')                 // preferencia: 'light' u 'dark'
+     const filter = ref('todas')                // preferencia: 'todas', 'pendientes' o 'hechas'
+     const toast = ref('')                      // aviso momentáneo: NO se guarda
+
+     function toggleTheme() {                   // action: alterna claro y oscuro
+       theme.value = theme.value === 'dark' ? 'light' : 'dark'
+     }
+
+     function notify(message) {                 // action: muestra (o borra, con '') un aviso
+       toast.value = message
+     }
+
+     // efecto secundario: cada vez que cambia el tema, lo aplica a la página
+     watch(theme, (value) => { document.documentElement.dataset.theme = value }, { immediate: true })
+
+     return { theme, filter, toast, toggleTheme, notify }
+   }, {
+     persist: { key: 'projecthub:ui:v1', paths: ['theme', 'filter'] } // toast queda fuera a propósito
    })
+   ```
 
-   onMounted(() => {
-     projectsStore.loadAll()
+2. Crea `src/stores/apiStatus.js`:
+
+   ```js
+   import { defineStore } from 'pinia'          // crea tiendas
+   import { computed, ref } from 'vue'          // piezas del capítulo 1
+   import { useUiStore } from './ui.js'         // dependencia en una sola dirección: apiStatus -> ui
+
+   export const useApiStatusStore = defineStore('apiStatus', () => {
+     const pending = ref(0)                     // cuántas peticiones van en curso
+     const errors = ref([])                     // todos los errores de la API, en un solo lugar
+     const isBusy = computed(() => pending.value > 0) // getter: ¿hay alguna petición en curso?
+
+     async function track(label, request) {     // envuelve cualquier llamada a la API
+       pending.value++                          // una petición más en curso
+       try {
+         return await request()                 // espera la respuesta y la devuelve tal cual
+       } catch (error) {
+         errors.value.push({ label, message: error.message }) // la anota en el registro central
+         useUiStore().notify(`No se pudo ${label}: ${error.message}`) // y avisa a la persona
+         throw error                            // quien llamó también se entera
+       } finally {
+         pending.value--                        // pase lo que pase, una menos en curso
+       }
+     }
+
+     return { pending, errors, isBusy, track }
+   })
+   ```
+
+3. Crea `src/stores/projects.js`. `Object.fromEntries` convierte una lista de pares `[id, proyecto]` en un objeto:
+
+   ```js
+   import { defineStore } from 'pinia'                  // crea tiendas
+   import { computed, ref } from 'vue'                  // piezas del capítulo 1
+   import { api } from '@/api.js'                       // API simulada (@ = src)
+   import { useApiStatusStore } from './apiStatus.js'   // carga y errores en un solo lugar
+
+   export const useProjectsStore = defineStore('projects', () => {
+     const byId = ref({})                               // normalizado: cada proyecto UNA vez, por su id
+     const allIds = ref([])                             // el orden de la lista, solo con los id
+     const status = ref('idle')                         // semáforo: idle, loading, success o error
+     const list = computed(() => allIds.value.map((id) => byId.value[id])) // getter: la lista en orden
+
+     async function loadAll(fail = false) {             // fail = true simula un error del servidor
+       status.value = 'loading'                         // semáforo: cargando
+       try {
+         const projects = await useApiStatusStore().track('cargar proyectos', () => api.getProjects(fail))
+         byId.value = Object.fromEntries(projects.map((p) => [p.id, p])) // { p1: {...}, p2: {...} }
+         allIds.value = projects.map((p) => p.id)       // ['p1', 'p2']
+         status.value = 'success'                       // semáforo: listo
+       } catch {
+         status.value = 'error'                         // semáforo: falló (el aviso ya lo dio apiStatus)
+       }
+     }
+
+     return { byId, allIds, status, list, loadAll }
+   })
+   ```
+
+4. Crea `src/stores/tasks.js`. `forProject` es un getter que devuelve una función: el `computed` entrega una función que recibe el id del proyecto, así la plantilla puede llamar `tasks.forProject(project.id)` y el resultado se recalcula cuando cambian las tareas o el filtro:
+
+   ```js
+   import { defineStore } from 'pinia'                  // crea tiendas
+   import { computed, ref } from 'vue'                  // piezas del capítulo 1
+   import { api } from '@/api.js'                       // API simulada (@ = src)
+   import { useApiStatusStore } from './apiStatus.js'   // carga y errores en un solo lugar
+   import { useUiStore } from './ui.js'                 // el filtro vive en la tienda de interfaz
+
+   export const useTasksStore = defineStore('tasks', () => {
+     const byId = ref({})                               // cada tarea UNA vez, por su id
+     const allIds = ref([])                             // el orden de las tareas
+     const ui = useUiStore()                            // una tienda puede usar otra
+     const pendingCount = computed(() => allIds.value.filter((id) => !byId.value[id].done).length)
+
+     // getter que devuelve una función: las tareas de un proyecto, según el filtro elegido
+     const forProject = computed(() => (projectId) => allIds.value
+       .map((id) => byId.value[id])                     // de id a tarea
+       .filter((task) => task.projectId === projectId)  // solo las de ese proyecto
+       .filter((task) => ui.filter === 'todas' || task.done === (ui.filter === 'hechas')))
+
+     async function loadAll() {
+       const tasks = await useApiStatusStore().track('cargar tareas', () => api.getTasks())
+       byId.value = Object.fromEntries(tasks.map((t) => [t.id, t])) // { t1: {...}, t2: {...} }
+       allIds.value = tasks.map((t) => t.id)            // ['t1', 't2', 't3', 't4']
+     }
+
+     function toggleDone(id) {                          // una sola copia: el cambio se ve en todas partes
+       byId.value[id].done = !byId.value[id].done
+     }
+
+     return { byId, allIds, pendingCount, forProject, loadAll, toggleDone }
+   })
+   ```
+
+5. Reemplaza todo `src/views/ProjectsView.vue`:
+
+   ```vue
+   <script setup>
+   import { onMounted } from 'vue'                            // ciclo de vida (capítulo 1)
+   import { storeToRefs } from 'pinia'                        // lo que se lee, con storeToRefs
+   import { useApiStatusStore } from '@/stores/apiStatus.js'  // carga y errores
+   import { useProjectsStore } from '@/stores/projects.js'    // proyectos
+   import { useTasksStore } from '@/stores/tasks.js'          // tareas
+   import { useUiStore } from '@/stores/ui.js'                // tema, filtro y avisos
+
+   const projects = useProjectsStore()                        // cada tienda, una vez
+   const tasks = useTasksStore()
+   const ui = useUiStore()
+   const { list, status } = storeToRefs(projects)             // datos y getters: conectados
+   const { filter, toast } = storeToRefs(ui)
+   const { isBusy, errors } = storeToRefs(useApiStatusStore())
+
+   onMounted(() => {                                          // al aparecer la vista...
+     projects.loadAll()                                       // ...pide los proyectos
+     tasks.loadAll()                                          // ...y las tareas
    })
    </script>
 
    <template>
      <section>
-       <h1>Proyectos</h1>
-
-       <label>
-         Buscar proyecto
-         <input
-           :value="projectFilters.query"
-           type="search"
-           @input="uiStore.setProjectFilters({ query: $event.target.value })"
-         >
-       </label>
-
-       <p v-if="filteredProjects.length === 0">
-         No hay proyectos que coincidan con el filtro.
+       <p>
+         <button type="button" @click="ui.toggleTheme()">Cambiar tema</button>
+         <label>
+           Mostrar
+           <select v-model="filter">
+             <option value="todas">Todas</option>
+             <option value="pendientes">Pendientes</option>
+             <option value="hechas">Hechas</option>
+           </select>
+         </label>
+         <button type="button" @click="projects.loadAll(true)">Simular error</button>
        </p>
-
-       <ul v-else>
-         <li v-for="project in filteredProjects" :key="project.id">
-           {{ project.name }} — {{ project.status }}
-         </li>
-       </ul>
+       <p>
+         Semáforo de proyectos: <strong>{{ status }}</strong>
+         <span v-if="isBusy">(cargando...)</span>
+         - Errores registrados: {{ errors.length }}
+       </p>
+       <p v-if="toast" role="alert">
+         {{ toast }}
+         <button type="button" @click="ui.notify('')">Cerrar aviso</button>
+       </p>
+       <h2>Proyectos ({{ tasks.pendingCount }} tareas pendientes)</h2>
+       <article v-for="project in list" :key="project.id">
+         <h3>{{ project.name }}</h3>
+         <ul>
+           <li v-for="task in tasks.forProject(project.id)" :key="task.id">
+             <label>
+               <input type="checkbox" :checked="task.done" @change="tasks.toggleDone(task.id)" />
+               {{ task.title }}
+             </label>
+           </li>
+         </ul>
+       </article>
      </section>
    </template>
    ```
 
-2. Refactorice los composables antiguos para que no creen estado global propio. Por ejemplo, cree o actualice `src/composables/useProjectFilters.js`:
+6. Guarda y recarga con `F5` (para que las tiendas nuevas nazcan limpias); entra otra vez como `Ana`.
+
+**Qué debes ver:** `Semáforo de proyectos: success - Errores registrados: 0`, **Proyectos (3 tareas pendientes)** y dos proyectos con sus tareas.
+
+**Primero, predice:** si marcas **Publicar el sitio**, ¿cambia el número del título? Sí: el título y la lista leen la **misma** copia de la tarea en `byId`. Ahora pulsa **Simular error** y predice si desaparecen los proyectos. No desaparecen: el semáforo pasa a `error`, el contador a `Errores registrados: 1` y aparece el aviso `No se pudo cargar proyectos: el servidor respondió 500`. Prueba también **Cambiar tema** y el filtro **Mostrar**.
+
+Abre Vue DevTools con `Alt + Shift + D` en la página (o el botón flotante de abajo) y entra a **Pinia**: verás las cinco tiendas con sus datos. Viene con el proyecto: `create-vue` lo dejó en `vite.config.js`, y la terminal de Vite lo anuncia al arrancar.
+
+## Paso 4. Persistencia selectiva con un plugin (6 minutos)
+
+**Qué vas a hacer y por qué:** un plugin es una función que Pinia llama una vez por cada tienda que nace. Pinia le pasa la tienda (`store`) y, en `options`, las opciones que la tienda declaró; en una tienda de composición son las del tercer argumento de `defineStore`, donde pusiste `persist`. Este plugin lee esa opción: al nacer, le devuelve lo guardado (hidratar) y, con `$subscribe`, guarda solo las claves de `paths` en cada cambio.
+
+**Primero, predice:** `auth` y `ui` declaran `persist` desde los pasos 2 y 3. ¿Por qué todavía no se guarda nada? Porque Pinia ignora esa opción: nadie la lee hasta que exista el plugin.
+
+1. Crea `src/plugins/persist.js`:
 
    ```js
-   import { storeToRefs } from 'pinia'
-   import { useUiStore } from '@/stores/ui'
+   // Plugin: Pinia lo llama una vez por cada tienda que nace, con la tienda y sus opciones
+   export function persistPlugin({ store, options }) {
+     const persist = options.persist                    // la política que declaró la tienda, si tiene
+     if (!persist) return                               // sin política: no hace nada
 
-   export function useProjectFilters() {
-     const uiStore = useUiStore()
-     const { projectFilters } = storeToRefs(uiStore)
-
-     return {
-       projectFilters,
-       setProjectFilters: uiStore.setProjectFilters,
-       resetProjectFilters: uiStore.resetProjectFilters,
+     try {                                              // leer puede fallar
+       const saved = localStorage.getItem(persist.key)  // el texto guardado con su nombre (key)
+       if (saved) store.$patch(JSON.parse(saved))       // hidratar: lo devuelve a la tienda
+     } catch {                                          // texto dañado...
+       localStorage.removeItem(persist.key)             // ...se borra para no fallar en cada carga
      }
-   }
-   ```
 
-3. No use este patrón:
-
-   ```js
-   const { projects } = useProjectsStore()
-   ```
-
-4. Use `storeToRefs` para estado y getters, y extraiga acciones directamente:
-
-   ```js
-   const projectsStore = useProjectsStore()
-   const { projects, selectedProject } = storeToRefs(projectsStore)
-   const { loadAll, selectProject } = projectsStore
-   ```
-
-**Resultado esperado:**
-
-Los componentes se actualizan cuando cambia el estado global y los composables se convierten en adaptadores pequeños de presentación.
-
-**Verificación:**
-
-Escriba un texto en el filtro de proyectos, recargue la página y confirme que el filtro se restaura desde `localStorage`.
-
----
-
-### Paso 8. Migrar los guards de Vue Router
-
-**Objetivo:** hacer que la protección de rutas consulte `useAuthStore` en lugar de composables o estado local.
-
-**Instrucciones:**
-
-1. Abra `src/router/index.js`.
-2. Compruebe que las rutas protegidas mantienen metadatos explícitos:
-
-   ```js
-   {
-     path: '/projects',
-     name: 'projects',
-     component: () => import('@/views/ProjectsView.vue'),
-     meta: {
-       requiresAuth: true,
-     },
-   }
-   ```
-
-3. Importe la store de autenticación y actualice el guard:
-
-   ```js
-   import { createRouter, createWebHistory } from 'vue-router'
-   import { useAuthStore } from '@/stores/auth'
-
-   const router = createRouter({
-     history: createWebHistory(),
-     routes: [
-       // Rutas existentes.
-     ],
-   })
-
-   router.beforeEach((to) => {
-     const authStore = useAuthStore()
-
-     if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-       return {
-         name: 'login',
-         query: {
-           redirect: to.fullPath,
-         },
+     store.$subscribe((mutation, state) => {            // Pinia avisa cada vez que cambian los datos
+       const chosen = {}                                // aquí va solo lo permitido
+       for (const key of persist.paths) {               // recorre la lista paths
+         chosen[key] = state[key]                       // copia solo esa clave
        }
-     }
-
-     if (to.name === 'login' && authStore.isAuthenticated) {
-       return {
-         name: 'projects',
+       try {
+         localStorage.setItem(persist.key, JSON.stringify(chosen)) // lo guarda como texto JSON
+       } catch {
+         // almacenamiento lleno o bloqueado: la aplicación sigue, solo no recuerda el cambio
        }
-     }
-
-     return true
-   })
-
-   export default router
-   ```
-
-4. En la vista de inicio de sesión, conserve el redireccionamiento original:
-
-   ```js
-   import { useRoute, useRouter } from 'vue-router'
-   import { useAuthStore } from '@/stores/auth'
-
-   const route = useRoute()
-   const router = useRouter()
-   const authStore = useAuthStore()
-
-   async function submit(credentials) {
-     await authStore.signIn(credentials)
-
-     await router.push(
-       typeof route.query.redirect === 'string'
-         ? route.query.redirect
-         : { name: 'projects' },
-     )
+     }, { detached: true })                             // sin detached, la suscripción muere al desmontarse el componente que creó la tienda (aquí, la vista de login o de proyectos)
    }
    ```
 
-**Resultado esperado:**
+2. En `src/main.js`, agrega esta línea debajo de `import router from './router'`:
 
-Una ruta protegida redirige al login cuando no hay sesión. Tras iniciar sesión, la ruta solicitada se recupera correctamente.
-
-**Verificación:**
-
-1. Abra una ventana de incógnito.
-2. Visite directamente:
-
-   ```text
-   http://127.0.0.1:5173/projects
+   ```js
+   import { persistPlugin } from './plugins/persist.js' // paso 4: guarda lo que cada tienda declara
    ```
 
-3. Confirme la redirección al login.
-4. Inicie sesión con las credenciales admitidas por MSW.
-5. Confirme que vuelve a `/projects`.
+3. Y esta, debajo de `const pinia = createPinia()`:
 
-## Validación y pruebas
-
-Ejecute las siguientes comprobaciones antes de considerar terminado el laboratorio.
-
-1. Compruebe la calidad estática y el empaquetado:
-
-   ```bash
-   npm run lint
-   npm run build
+   ```js
+   pinia.use(persistPlugin)                             // paso 4: se registra antes de que nazca cualquier tienda
    ```
 
-2. Inicie nuevamente el servidor:
+4. Recarga con `F5`, entra como `Ana`, elige el tema oscuro y el filtro **Pendientes**, y recarga otra vez.
 
-   ```bash
-   npm run dev -- --host 127.0.0.1 --port 5173
-   ```
-
-3. Valide manualmente la matriz de comportamiento:
-
-   | Caso | Resultado esperado |
-   |---|---|
-   | Usuario anónimo abre `/projects` | Router redirige a login. |
-   | Inicio de sesión válido | `authStore.isAuthenticated` pasa a `true`. |
-   | Recarga tras iniciar sesión | Se restaura usuario, roles y expiración mínima. |
-   | Revisión de `localStorage` | No existen tokens, errores ni operaciones pendientes. |
-   | Cambio de tema | El tema se mantiene tras recargar. |
-   | Aplicación de filtro | El filtro se mantiene tras recargar. |
-   | Carga de proyectos | Se registran acciones `projects.loadAll` en consola de desarrollo. |
-   | Error simulado de API | Se registra en `apiStatusStore.errors` y aparece una notificación. |
-   | Cierre de sesión | Se elimina la sesión y una ruta protegida vuelve a redirigir. |
-
-4. Inspeccione la consola de desarrollo. Debe encontrar mensajes similares a:
-
-   ```text
-   [pinia:action] auth.signIn
-   [pinia:success] auth.signIn
-   [pinia:mutation] auth
-   [pinia:action] projects.loadAll
-   ```
-
-5. Confirme que el plugin de auditoría no forma parte del comportamiento de producción:
-
-   ```bash
-   npm run build
-   npm run preview -- --host 127.0.0.1 --port 4173
-   ```
-
-   Abra `http://127.0.0.1:4173` y verifique que la aplicación compila y navega correctamente. Detenga la previsualización al terminar.
-
-## Solución de problemas
-
-### Problema 1: `getActivePinia()` o “no active Pinia” al ejecutar un guard
-
-**Síntoma:** al navegar a una ruta protegida aparece un error similar a `getActivePinia() was called but there was no active Pinia`.
-
-**Causa:** el router o un guard intenta usar `useAuthStore()` antes de que la instancia de Pinia haya sido registrada en la aplicación.
-
-**Solución:** confirme el orden en `src/main.js`:
+**Qué debes ver:** sigues dentro como `Ana`, con el tema oscuro y el filtro **Pendientes**. Si había un aviso, desapareció: `toast` no se guarda. Abre las herramientas de Chrome (`F12`), pestaña **Consola**, y escribe:
 
 ```js
-app.use(pinia)
-app.use(router)
-app.mount('#app')
+localStorage.getItem('projecthub:auth:v1')
 ```
 
-También confirme que no está ejecutando `useAuthStore()` en el nivel superior de `src/router/index.js`. Debe invocarse dentro de `router.beforeEach()`.
+Responde `'{"user":{"name":"Ana","roles":["editor"]}}'`: no hay token. `localStorage.getItem('projecthub:ui:v1')` responde `'{"theme":"dark","filter":"pendientes"}'`, sin `toast`.
 
-### Problema 2: el tema o los filtros no se restauran, o aparece un error al leer `localStorage`
+## Paso 5. Auditoría de acciones solo en desarrollo (4 minutos)
 
-**Síntoma:** tras recargar la página, el tema vuelve al valor inicial; la consola muestra un error de `JSON.parse`; o la aplicación conserva datos antiguos incompatibles.
+**Qué vas a hacer y por qué:** `$onAction` avisa antes de cada action y permite saber cuándo termina (`after`) o si falla (`onError`). Con eso medimos sin tocar ninguna tienda. `import.meta.env.DEV` vale `true` mientras programas y `false` en la versión publicada.
 
-**Causa:** existe una entrada corrupta o con una estructura previa en `localStorage`.
+1. Crea `src/plugins/audit.js`:
 
-**Solución:** elimine exclusivamente las claves de persistencia de este laboratorio y recargue:
+   ```js
+   // Plugin de auditoría: anota en la consola cada action, cuánto tardó y si falló
+   export function auditPlugin({ store }) {
+     store.$onAction(({ name, after, onError }) => {    // avisa antes de cada action
+       const id = `${store.$id}.${name}`                // ej.: projects.loadAll
+       const start = performance.now()                  // arranca el cronómetro
+       after(() => {                                    // si la action termina bien...
+         const ms = performance.now() - start           // ...cuánto tardó
+         console.info(id, ms.toFixed(1), 'ms')          // lo anota en la consola
+       })
+       onError((error) => {                             // si la action falla...
+         console.error(id, error.message)               // ...anota el error, en rojo
+       })
+     })
+   }
+   ```
+
+2. En `src/main.js`, agrega el import debajo del de `persistPlugin`:
+
+   ```js
+   import { auditPlugin } from './plugins/audit.js'     // paso 5: anota cada acción en la consola
+   ```
+
+3. Y esta línea debajo de `pinia.use(persistPlugin)`:
+
+   ```js
+   if (import.meta.env.DEV) pinia.use(auditPlugin)      // paso 5: solo mientras programas, nunca en producción
+   ```
+
+**Primero, predice:** al recargar `/proyectos`, ¿qué actions aparecerán en la consola?
+
+**Qué debes ver** en la consola de Chrome, con tiempos parecidos, cuatro líneas: `apiStatus.track 305.7 ms` y `tasks.loadAll 311.8 ms` (las tareas), y `apiStatus.track 414.3 ms` y `projects.loadAll 419.2 ms` (los proyectos). Cada carga deja dos: la de `track` y la de la action que lo llamó. Antes salen líneas como `🍍 "projects" store installed 🆕`: las escribe Vue DevTools cuando conecta cada tienda, no tu plugin. Pulsa **Simular error** y salen tres más: `ui.notify 0.3 ms` (el aviso que dio `apiStatus`), en rojo `apiStatus.track el servidor respondió 500`, que es la que provocaste a propósito, y `projects.loadAll 411.9 ms` como mensaje normal, porque esa action atrapó el error y puso el semáforo en `error`.
+
+## Paso 6. Comprobar los cinco resultados (3 minutos)
+
+| Comprobación | Resultado esperado |
+|---|---|
+| **Pinia** en Vue DevTools (`Alt + Shift + D`), o los archivos de `src/stores` | Cinco tiendas: `auth`, `ui`, `apiStatus`, `projects` y `tasks` |
+| Marcar una tarea | El título de pendientes cambia: una sola copia en `byId` |
+| `F5` y la consola con `localStorage` | Tema, filtro y sesión siguen; no hay `token`, `toast` ni errores guardados |
+| **Simular error** | `Errores registrados` sube y aparece el aviso |
+| **Salir** y abrir `/proyectos` | La guardia te lleva de nuevo al formulario |
+
+**Opcional (3 minutos): si vienes de Vuex.** El tema 4.1 en una tabla. La migración se hace por partes: un módulo a la vez, y cada dato con un solo dueño.
+
+| Vuex | Pinia |
+|---|---|
+| Un solo almacén con módulos | Una tienda por dominio, como las cinco de hoy |
+| `mutations` para cambiar el estado | No existen: las actions cambian los datos directamente |
+| `commit` y `dispatch` con textos | Se llama la action como una función: `auth.signOut()` |
+| `mapState` y `mapGetters` | `storeToRefs(tienda)` |
+
+## Resultado esperado
+
+- Cinco tiendas: sesión, proyectos, tareas, interfaz y API.
+- Cada proyecto y tarea, guardado una vez (`byId`, `allIds`).
+- Tema, filtros y sesión mínima sobreviven, sin tokens.
+- Carga y errores, en un lugar.
+
+<details>
+<summary>Código final de los archivos que cambiaron después de crearlos</summary>
+
+`src/main.js`:
 
 ```js
-localStorage.removeItem('projecthub:ui')
-localStorage.removeItem('projecthub:auth')
-location.reload()
+import { createApp } from 'vue'                      // crea la aplicación
+import { createPinia } from 'pinia'                  // crea Pinia, el gestor de tiendas
+import App from './App.vue'                          // componente principal
+import router from './router'                        // enrutador: Vite abre src/router/index.js
+import { persistPlugin } from './plugins/persist.js' // paso 4: guarda lo que cada tienda declara
+import { auditPlugin } from './plugins/audit.js'     // paso 5: anota cada acción en la consola
+
+const pinia = createPinia()                          // la instancia de Pinia, en una variable para hablarle
+pinia.use(persistPlugin)                             // paso 4: se registra antes de que nazca cualquier tienda
+if (import.meta.env.DEV) pinia.use(auditPlugin)      // paso 5: solo mientras programas, nunca en producción
+
+createApp(App)                                       // crea la aplicación con App como raíz
+  .use(pinia)                                        // primero Pinia: la guardia del enrutador usa una tienda
+  .use(router)                                       // después el enrutador
+  .mount('#app')                                     // la dibuja dentro de <div id="app">
 ```
 
-Después, vuelva a cambiar el tema, aplicar un filtro e iniciar sesión para que los plugins generen datos con la estructura actual.
+`src/views/ProjectsView.vue` queda como lo copiaste en el paso 3. Los demás archivos no cambian después de crearlos.
+
+</details>
+
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5174     # arranca la aplicación en http://localhost:5174
+```
+
+## Problemas frecuentes
+
+| Lo que ves | Por qué pasa | Cómo se arregla |
+|---|---|---|
+| `getActivePinia() was called but there was no active Pinia` | El enrutador se instaló antes que Pinia, o `useAuthStore()` quedó fuera de `beforeEach` | En `main.js`, `.use(pinia)` antes de `.use(router)`; en `router/index.js`, la tienda se pide dentro de la guardia |
+| `[Vue Router warn]: No match found for location with path "/proyectos"` | Arrancaste el servidor con el `src/router/index.js` de `create-vue`, que no tiene rutas | Reemplázalo (paso 2.4), guarda y recarga con `F5` |
+| Tras recargar, el tema o la sesión se pierden | Falta `pinia.use(persistPlugin)` o la clave no está en `paths` | Revisa el paso 4 y el `persist` de la tienda |
+| Guardas una tienda y no ves el cambio | La recarga en caliente de Vite conserva la tienda que ya nació | Recarga con `F5` |
+| `npm create vue@latest` hace preguntas (`Project name`, `Add TypeScript?`) o, al arrancar, Vite pide un Node.js más nuevo | Sin versión fijada llega un `create-vue` que trae Vite 7 (exige Node.js 20.19 o 22.12 en adelante), y sin opciones el asistente pregunta | Usa el comando de la guía, `npx --yes create-vue@3.16.4 projecthub --bare --router --pinia`: no pregunta, trae Vite 6 y sirve igual en los tres sistemas, sin el `--` que PowerShell se come |
+| La terminal dice `Local: http://localhost:5173/` en lugar de 5174 | Usaste `npm run dev -- --port 5174` en PowerShell: el `--` se pierde y Vite recibe `5174` como carpeta, no como puerto | Detén con `Ctrl + C` y arranca con `npx vite --port 5174` |
+| `Port 5174 is in use` | Otro servidor quedó abierto | Ciérralo con `Ctrl + C` en su terminal |
 
 ## Limpieza
 
-1. Detenga el servidor Vite con:
+1. En la terminal del servidor, pulsa `Ctrl + C`.
+2. Para empezar de cero otra vez, en la consola de Chrome: `localStorage.removeItem('projecthub:ui:v1')` y `localStorage.removeItem('projecthub:auth:v1')`.
 
-   ```bash
-   Ctrl+C
-   ```
+## Ejercicios de reserva
 
-2. Si inició el servidor de previsualización, deténgalo también con:
+**Básico.** Agrega a la tienda `ui` un dato `fontSize`, tamaño de letra, con valor `16`, y decide si va en `paths`.
 
-   ```bash
-   Ctrl+C
-   ```
+<details>
+<summary>Solución</summary>
 
-3. No elimine el proyecto, las stores ni los plugins. Serán la base para el laboratorio `05-00-01`.
+Sí va, porque lo eligió la persona. En `src/stores/ui.js` agrega `const fontSize = ref(16)` debajo de `toast`, añade `fontSize` al `return` y deja `paths: ['theme', 'filter', 'fontSize']`.
 
-4. Si necesita restablecer el estado local para una nueva demostración, ejecute en la consola del navegador:
+</details>
 
-   ```js
-   localStorage.removeItem('projecthub:ui')
-   localStorage.removeItem('projecthub:auth')
-   ```
+**Medio.** Haz que el plugin de persistencia descarte lo guardado si tiene más de 30 días.
 
-## Resumen
+<details>
+<summary>Solución</summary>
 
-En este laboratorio implementó una arquitectura Pinia modular para `projecthub-spa`. La autenticación, proyectos, tareas, interfaz y estado de API ahora tienen responsabilidades independientes y una fuente de verdad explícita.
+En `src/plugins/persist.js`, guarda la fecha junto a los datos y revísala al leer. El archivo completo queda así (cambian `MAX_AGE`, el bloque del `try` de lectura y el `setItem`):
 
-También creó persistencia selectiva para preferencias y sesión mínima, excluyendo tokens y estados transitorios, y añadió auditoría de acciones y mutaciones en desarrollo. Finalmente, los guards de Vue Router y los composables de presentación fueron adaptados para depender de stores Pinia en lugar de mantener copias locales del estado global.
+```js
+const MAX_AGE = 30 * 24 * 60 * 60 * 1000                   // 30 días en milisegundos
+
+export function persistPlugin({ store, options }) {
+  const persist = options.persist
+  if (!persist) return
+
+  try {
+    const saved = localStorage.getItem(persist.key)
+    const data = saved ? JSON.parse(saved) : null            // lo guardado, si hay
+    if (data && Date.now() - data.savedAt < MAX_AGE) {       // solo si es reciente...
+      store.$patch(data.state)                               // ...lo devuelve a la tienda
+    } else if (data) {
+      localStorage.removeItem(persist.key)                   // vencido: se borra
+    }
+  } catch {
+    localStorage.removeItem(persist.key)
+  }
+
+  store.$subscribe((mutation, state) => {
+    const chosen = {}
+    for (const key of persist.paths) {
+      chosen[key] = state[key]
+    }
+    try {
+      localStorage.setItem(persist.key, JSON.stringify({ savedAt: Date.now(), state: chosen })) // los datos con su fecha
+    } catch {
+      // almacenamiento lleno o bloqueado
+    }
+  }, { detached: true })
+}
+```
+
+Lo guardado con el formato anterior no tiene `savedAt`: la comparación da falso y se borra, así que la primera recarga empieza limpia.
+
+</details>
+
+**Avanzado.** Lo guardado es entrada externa: cualquiera lo edita en las herramientas del navegador. Agrega a `persist` una función `validate` que devuelva solo los campos con valores aceptables, y úsala antes del `$patch`.
+
+<details>
+<summary>Solución</summary>
+
+En `src/stores/ui.js`, dentro de `persist`:
+
+```js
+validate: (data) => ({
+  theme: ['light', 'dark'].includes(data.theme) ? data.theme : 'light',                 // solo temas conocidos
+  filter: ['todas', 'pendientes', 'hechas'].includes(data.filter) ? data.filter : 'todas', // solo filtros conocidos
+}),
+```
+
+En `src/plugins/persist.js`, cambia la hidratación por:
+
+```js
+if (saved) {
+  const data = JSON.parse(saved)                                // el texto, como objeto
+  store.$patch(persist.validate ? persist.validate(data) : data) // valida si la tienda sabe cómo
+}
+```
+
+</details>
+
+## Recursos
+
+- [Qué es Pinia y por qué la usa Vue](https://pinia.vuejs.org/introduction.html).
+- [Tiendas, getters y actions](https://pinia.vuejs.org/core-concepts/).
+- [Plugins: `$subscribe`, `$onAction` y opciones propias](https://pinia.vuejs.org/core-concepts/plugins.html).
+- [Migrar de Vuex a Pinia](https://pinia.vuejs.org/cookbook/migration-vuex.html).
+- [Cómo compartir estado en Vue](https://vuejs.org/guide/scaling-up/state-management.html).
+
+## Control de cambios
+
+| Versión | Fecha | Autor | Cambio |
+|---|---|---|---|
+| 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita para construir desde una carpeta vacía con Vite 6.4: todo el código en la guía, predicción y resultado visible por paso, repaso de la guardia del capítulo 3, persistencia y auditoría con plugins propios, y ejercicios de reserva con solución |
+| 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por CLI (interfaz de línea de comandos) en Windows y Linux: el proyecto se crea con `npx --yes create-vite@6.4.1` y el servidor con `npx vite --port 5174`, porque PowerShell se come el `--`; predicción completa de la consola en el paso 5; tiempos 1 y 14 minutos en los pasos 1 y 3; Node.js mínimo probado; explicación del getter que devuelve una función, de `options` en el plugin y de `detached`; ejercicio medio con el archivo completo; dos problemas frecuentes nuevos |
+| 2.2 | 2026-10-17 | Andrés Eduardo García Márquez | El proyecto se crea con `create-vue` 3.16.4, la herramienta oficial de Vue que enseñan los manuales (`--bare --router --pinia`), en lugar de `create-vite` más la instalación manual de Pinia y Vue Router; tabla de lo que trae el proyecto y qué se reemplaza o se borra; el enrutador pasa a `src/router/index.js` y los imports usan el atajo `@/`; Vue DevTools viene integrado (`Alt + Shift + D`); predicción de la consola con los mensajes de las tiendas; problemas frecuentes de `create-vue`; `ejercicio-resuelto/` regenerado siguiendo la guía y validado por CLI en Windows y Linux |

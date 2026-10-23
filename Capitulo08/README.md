@@ -1,172 +1,76 @@
-# 4 Practica final: diseñar y desplegar una aplicación escalable con pipeline automatizado
+# Práctica 8.4: diseñar y desplegar una aplicación escalable con pipeline automatizado
 
-## Metadatos
-
-| Propiedad | Valor |
+| Campo | Valor |
 |---|---|
 | Duración | 43 minutos |
-| Complejidad | Difícil |
+| Complejidad | Media |
 | Nivel de Bloom | Crear |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio transformarás la SPA **Catalogo Pro**, validada en los laboratorios anteriores, en una plataforma desplegable y mantenible basada en un monorepo con `pnpm workspaces`. Migrarás la aplicación a `apps/web`, crearás paquetes compartidos para interfaz y configuración, definirás una pipeline de calidad y liberación, y construirás una imagen Docker servida por Nginx.
+Vas a reorganizar Catálogo Pro en un monorepo (un solo repositorio con varias aplicaciones y paquetes) y a publicarlo con una pipeline (canalización automática que revisa, construye y publica). La app pasa a `apps/web`, con un paquete de interfaz compartido, observabilidad mínima, imagen Docker con Nginx y GitHub Actions. Para no depender de tu proyecto anterior, partes de una carpeta vacía y armas una versión mínima de Catálogo Pro.
 
-El resultado incluirá observabilidad mínima en cliente, una imagen versionada, un endpoint de salud, caché para recursos estáticos, documentación de arquitectura y un procedimiento verificable de rollback.
+Al terminar tendrás cuatro resultados a la vista: `✓ built` del monorepo, eventos `[catalogo-observability]` en la consola, el contenedor `healthy` y el flujo de CI en `completed success`.
 
-## Objetivos de aprendizaje
+## Objetivos
 
-Al completar este laboratorio podrás:
+- Separar el código en `apps/` y `packages/` con pnpm workspaces, con dependencias en un solo sentido.
+- Compartir un componente por su puerta de entrada (`index.js`) y una configuración de pruebas común.
+- Registrar navegaciones, errores y la versión desplegada en la consola y en `localStorage`.
+- Construir una imagen Docker de dos etapas con `/health` y rutas de Vue que no dan 404.
+- Automatizar pruebas y compilación con GitHub Actions y publicar la imagen con su versión y su SHA (identificador del commit).
 
-- [ ] Reorganizar una SPA Vue en un monorepo con `apps/` y `packages/`, aplicando límites de responsabilidad.
-- [ ] Crear configuraciones compartidas de TypeScript, ESLint y Vitest para un workspace de `pnpm`.
-- [ ] Implementar una pipeline de GitHub Actions para lint, pruebas, cobertura, build y pruebas E2E con Cypress.
-- [ ] Construir y ejecutar una imagen Docker de producción basada en `nginx:1.27.3-alpine`.
-- [ ] Registrar errores, duración de navegación y versión desplegada mediante observabilidad cliente.
-- [ ] Documentar promoción, verificación post-despliegue, criterios de detención y rollback por etiqueta de imagen.
+## Conceptos que usas
 
-## Requisitos previos
+Monorepo, `pnpm-workspace.yaml`, `workspace:*` y puerta de entrada `index.js` (8.1); variables `VITE_`, Dockerfile de dos etapas, `.dockerignore`, Nginx con `try_files`, GitHub Actions, `--frozen-lockfile`, etiquetas `v1.0.0` y ghcr.io (8.2); `app.config.errorHandler` y rollback (8.3); create-vue con `--router` y el atajo `@` hacia `src` (capítulos 0 y 1); `beforeEach` y `afterEach` de Vue Router (capítulo 3); `describe`, `it` y `expect` de Vitest (capítulo 7).
 
-### Conocimientos requeridos
+**Repaso del capítulo 7:** la prueba de Vitest que escribes en el paso 1 es la misma que después corre la pipeline en cada cambio.
 
-- Uso básico de Git, ramas, etiquetas y GitHub Actions.
-- Manejo de `package.json`, scripts npm, YAML y variables de entorno.
-- Conceptos de Dockerfile, imágenes, contenedores, puertos y healthchecks.
-- Vue 3, Vite, Vue Router, Pinia, pruebas con Vitest y Cypress.
-- Laboratorio 06-00-01 completado, incluyendo `docs/performance-report.md`.
-- Laboratorio 07-00-01 completado, incluyendo pruebas unitarias, de componentes y E2E ejecutables.
+## Antes de empezar
 
-### Accesos y servicios requeridos
+- Node.js 24 LTS (validado con 24.22.0), Git, Chrome y Docker Desktop abierto.
+- Cuenta de GitHub y GitHub CLI (`gh`, la herramienta de GitHub para la terminal) con sesión iniciada. Sin ella llegas hasta el paso 4 y el 5 lo ves en el equipo del instructor.
+- Los comandos sirven igual en PowerShell y en bash, salvo donde se indica.
 
-- GitHub CLI autenticado:
+## Preparación (4 minutos)
 
-  ```bash
-  gh auth status
-  ```
-
-- Docker Desktop iniciado:
-
-  ```bash
-  docker version
-  docker info
-  ```
-
-- Acceso para crear o actualizar un repositorio GitHub.
-- El repositorio debe mantener `main` como única rama de trabajo persistente.
-
-## Entorno del laboratorio
-
-| Componente | Versión objetivo |
-|---|---:|
-| Node.js | 22.14.0 |
-| pnpm | 9.15.4 |
-| Vue | 3.5.13 |
-| Vite | 6.1.0 |
-| Docker Engine | 27.5.1 |
-| Docker Desktop | 4.37.2 |
-| Nginx | 1.27.3-alpine |
-| GitHub CLI | 2.63.2 |
-| Google Chrome | 132 o superior |
-| Puerto Vite local | 5173 |
-| Puerto de contenedor Nginx | 8080 |
-| Puerto reservado para API futura | 3000 |
-
-> **Importante:** No inicies servicios en el puerto `3000`. Durante desarrollo, MSW debe continuar interceptando las solicitudes REST y GraphQL desde el navegador.
-
-### Preparación inicial
-
-El repositorio final del laboratorio se ubicará en:
-
-```text
-/workspace/vue-intermedio/catalogo-platform
-```
-
-En Windows, usa el equivalente:
-
-```text
-C:\workspace\vue-intermedio\catalogo-platform
-```
-
-Ejecuta las siguientes comprobaciones:
-
-```bash
-node --version
-npm --version
-git --version
-docker --version
-
-corepack enable
-corepack prepare pnpm@9.15.4 --activate
-pnpm --version
-```
-
-La salida de `pnpm --version` debe indicar:
-
-```text
-9.15.4
-```
-
-## Procedimiento paso a paso
-
-### Paso 1. Crear el monorepo y migrar Catalogo Pro
-
-**Objetivo:** Crear la estructura base del monorepo y trasladar la SPA previamente validada a `apps/web`.
-
-**Instrucciones:**
-
-1. Crea el directorio de destino y entra en él:
+1. Instala pnpm, el gestor de paquetes que entiende monorepos, en la versión del curso, y comprueba las herramientas:
 
    ```bash
-   mkdir -p /workspace/vue-intermedio/catalogo-platform
-   cd /workspace/vue-intermedio/catalogo-platform
+   npm install -g pnpm@9.15.4
+   pnpm --version
+   docker version
+   gh auth status
    ```
 
-2. Inicializa el repositorio Git solamente si aún no existe:
+   **Qué debes ver:** `9.15.4`, una sección `Server` en `docker version` y `Logged in to github.com`.
+
+   Si en `Token scopes` de `gh auth status` no aparece `workflow`, dale ese permiso ahora; sin él, GitHub rechaza el `push` del paso 5 porque trae archivos de `.github/workflows`:
 
    ```bash
+   gh auth refresh -s workflow
+   ```
+
+2. En **otra** terminal, deja descargando las imágenes base mientras avanzas:
+
+   ```bash
+   docker pull node:24.22.0-alpine
+   docker pull nginx:1.27.3-alpine
+   ```
+
+3. En la primera terminal, crea tu carpeta vacía, entra y arranca Git con la rama `main`:
+
+   ```bash
+   mkdir catalogo-platform
+   cd catalogo-platform
    git init -b main
    ```
 
-3. Crea la estructura inicial:
+## Paso 1. Monorepo y paquetes compartidos (10 minutos)
 
-   ```bash
-   mkdir -p apps packages/ui/src/components packages/config docs .github/workflows
-   ```
+**Qué vas a hacer y por qué:** la raíz solo coordina. Lo reutilizable vive en `packages/`: `@catalogo/ui` expone un componente solo por `src/index.js` y `@catalogo/config` guarda las reglas de prueba comunes. Las dependencias van en un solo sentido: `web` usa `ui`, `ui` usa `config`, nunca al revés.
 
-4. Copia la aplicación validada del laboratorio anterior. Ajusta la ruta de origen si tu repositorio anterior tiene otra ubicación:
-
-   ```bash
-   cp -R /workspace/vue-intermedio-labs/projecthub-spa apps/web
-   ```
-
-   Si el proyecto anterior se llama de otra forma, copia su contenido a `apps/web`.
-
-5. Elimina artefactos que no deben migrarse:
-
-   ```bash
-   rm -rf apps/web/node_modules
-   rm -rf apps/web/dist
-   rm -f apps/web/package-lock.json
-   rm -f apps/web/pnpm-lock.yaml
-   ```
-
-6. Verifica que los entregables obligatorios del laboratorio 06 y 07 estén presentes. Si se encontraban en el proyecto anterior, cópialos al nuevo repositorio:
-
-   ```bash
-   mkdir -p docs
-   cp apps/web/docs/performance-report.md docs/performance-report.md 2>/dev/null || true
-   cp apps/web/docs/test-report.md docs/test-report.md 2>/dev/null || true
-   ```
-
-7. Crea el archivo `pnpm-workspace.yaml` en la raíz:
-
-   ```yaml
-   packages:
-     - "apps/*"
-     - "packages/*"
-   ```
-
-8. Crea el `package.json` raíz:
+1. En la raíz, crea `package.json`. `packageManager` fija pnpm (una sola fuente de verdad: la leen Docker y GitHub); `--filter` ejecuta en un paquete y `-r` en todos:
 
    ```json
    {
@@ -176,19 +80,169 @@ La salida de `pnpm --version` debe indicar:
      "packageManager": "pnpm@9.15.4",
      "scripts": {
        "dev": "pnpm --filter @catalogo/web dev",
-       "lint": "pnpm -r --if-present lint",
        "test": "pnpm -r --if-present test",
-       "test:coverage": "pnpm -r --if-present test:coverage",
-       "build": "pnpm --filter @catalogo/web build",
-       "test:e2e": "pnpm --filter @catalogo/web test:e2e",
-       "check": "pnpm lint && pnpm test:coverage && pnpm build",
-       "docker:build": "docker build -t catalogo-platform:local .",
-       "docker:run": "docker run --rm -p 8080:80 --name catalogo-platform catalogo-platform:local"
+       "build": "pnpm --filter @catalogo/web build"
      }
    }
    ```
 
-9. Actualiza `apps/web/package.json`. Conserva las dependencias existentes de Vue, Pinia, Router, Axios, Apollo, MSW, Vitest y Cypress del laboratorio anterior, pero ajusta el nombre y los scripts principales:
+2. Crea `pnpm-workspace.yaml` y `.gitignore` (este último, con lo que se regenera y no se sube).
+
+   `pnpm-workspace.yaml`:
+
+   ```yaml
+   # cada carpeta dentro de apps/ y packages/ es un paquete del monorepo
+   packages:
+     - "apps/*"
+     - "packages/*"
+   ```
+
+   `.gitignore`:
+
+   ```text
+   node_modules
+   dist
+   ```
+
+3. El paquete de configuración.
+
+   `packages/config/package.json`:
+
+   ```json
+   {
+     "name": "@catalogo/config",
+     "version": "1.0.0",
+     "private": true,
+     "type": "module",
+     "exports": { "./vitest": "./vitest.config.js" }
+   }
+   ```
+
+   `packages/config/vitest.config.js`:
+
+   ```js
+   // Reglas de prueba comunes a todos los paquetes
+   export default {
+     test: {
+       include: ['src/**/*.test.js'], // dónde viven las pruebas
+       reporters: ['verbose'] // muestra el nombre de cada prueba
+     }
+   }
+   ```
+
+4. El paquete de interfaz: `packages/ui/package.json`. `exports` es la puerta de entrada (de fuera no se puede importar otro archivo) y `workspace:*` enlaza el paquete hermano en lugar de descargarlo:
+
+   ```json
+   {
+     "name": "@catalogo/ui",
+     "version": "1.0.0",
+     "private": true,
+     "type": "module",
+     "exports": { ".": "./src/index.js" },
+     "scripts": { "test": "vitest run" },
+     "peerDependencies": { "vue": "^3.5.0" },
+     "devDependencies": {
+       "@catalogo/config": "workspace:*",
+       "vitest": "3.0.9",
+       "vue": "3.5.13"
+     }
+   }
+   ```
+
+   `packages/ui/vitest.config.js`:
+
+   ```js
+   export { default } from '@catalogo/config/vitest' // reutiliza las reglas compartidas
+   ```
+
+5. La lógica y su prueba, como en el capítulo 7.
+
+   `packages/ui/src/estado.js`:
+
+   ```js
+   const ETIQUETAS = { activo: 'Activo', agotado: 'Agotado', pendiente: 'Pendiente' }
+
+   // Traduce el código del estado a la palabra que ve el usuario
+   export function etiquetaDeEstado(estado) {
+     return ETIQUETAS[estado] ?? 'Desconocido' // ?? da un valor de respaldo
+   }
+   ```
+
+   `packages/ui/src/estado.test.js`:
+
+   ```js
+   import { describe, it, expect } from 'vitest'
+   import { etiquetaDeEstado } from './estado.js'
+
+   describe('etiquetaDeEstado', () => {
+     it('traduce un estado conocido', () => {
+       expect(etiquetaDeEstado('agotado')).toBe('Agotado')
+     })
+     it('avisa cuando no conoce el estado', () => {
+       expect(etiquetaDeEstado('xyz')).toBe('Desconocido')
+     })
+   })
+   ```
+
+6. El componente y la puerta de entrada.
+
+   `packages/ui/src/EtiquetaEstado.vue` (los estilos, cópialos tal cual):
+
+   ```vue
+   <script setup>
+   import { computed } from 'vue'
+   import { etiquetaDeEstado } from './estado.js'
+
+   const props = defineProps({ estado: { type: String, required: true } })
+   const texto = computed(() => etiquetaDeEstado(props.estado)) // se recalcula si cambia el estado
+   </script>
+
+   <template>
+     <span class="etiqueta" :data-estado="estado">{{ texto }}</span>
+   </template>
+
+   <style scoped>
+   .etiqueta { padding: 0.1rem 0.5rem; border-radius: 999px; font-weight: 700; background: #e5e7eb; color: #111827; }
+   .etiqueta[data-estado='activo'] { background: #dcfce7; color: #166534; }
+   .etiqueta[data-estado='agotado'] { background: #fee2e2; color: #991b1b; }
+   </style>
+   ```
+
+   `packages/ui/src/index.js`:
+
+   ```js
+   // Puerta de entrada pública: las apps importan solo desde aquí
+   export { default as EtiquetaEstado } from './EtiquetaEstado.vue'
+   export { etiquetaDeEstado } from './estado.js'
+   ```
+
+7. **Primero, predice:** `pnpm test` en la raíz, ¿en cuántos paquetes corre pruebas? Ejecuta:
+
+   ```bash
+   pnpm install
+   pnpm test
+   ```
+
+   **Qué debes ver:** `Scope: all 3 workspace projects` al instalar; después las dos pruebas con `✓` y `Tests  2 passed (2)`. Solo `ui` tiene script `test`; `--if-present` salta los demás.
+
+## Paso 2. La app web consume el paquete (8 minutos)
+
+**Qué vas a hacer y por qué:** la app vive en `apps/web` y usa `ui` solo por su puerta de entrada, sin rutas internas.
+
+1. Crea la app con create-vue, la herramienta oficial de Vue (la misma de `npm create vue@latest` del capítulo 0), en una versión fija que funciona con Node 20, 22 y 24. Se lanza **dentro** de `apps/` porque create-vue usa el nombre de la carpeta como nombre del paquete y uno con `/` le haría preguntar. Los comandos son iguales en Windows (PowerShell), macOS y Linux:
+
+   ```bash
+   mkdir apps
+   cd apps
+   npx --yes create-vue@3.16.4 web --bare --router
+   cd ..
+   ```
+
+   `--router` agrega Vue Router y `src/router/index.js`; `--bare` deja el proyecto mínimo, sin componentes de ejemplo. Escribe las opciones sin `--` delante del nombre: PowerShell se lo come. create-vue solo copia archivos y no instala nada, así que no mezcla npm con pnpm: la instalación la hace pnpm en el punto 6. **No ejecutes** el `npm install` que sugiere al final.
+
+   Mira lo que trajo `apps/web`: `index.html`, `vite.config.js` (Vite 6 con el atajo `@` hacia `src` y las Vue DevTools), `jsconfig.json`, `public/favicon.ico`, `.vscode/`, `.gitignore` y `README.md` se quedan sin cambios. `src/main.js` también se queda por ahora: ya crea la app, le suma el enrutador y la dibuja en `#app` (lo amplías en el paso 3). Reemplazas `package.json`, `src/router/index.js` y `src/App.vue`, y no borras nada.
+
+2. Reemplaza `apps/web/package.json` completo. El nombre `@catalogo/web` es el que usa `--filter`; las versiones van fijas para que todos instalen lo mismo, y `vite-plugin-vue-devtools` se queda porque lo usa el `vite.config.js` que trajo create-vue:
 
    ```json
    {
@@ -197,1334 +251,448 @@ La salida de `pnpm --version` debe indicar:
      "private": true,
      "type": "module",
      "scripts": {
-       "dev": "vite",
-       "build": "vite build",
-       "preview": "vite preview",
-       "lint": "eslint .",
-       "test": "vitest run",
-       "test:coverage": "vitest run --coverage",
-       "test:e2e": "start-server-and-test \"vite preview --host 127.0.0.1 --port 4173\" http://127.0.0.1:4173 \"cypress run\""
+       "dev": "vite --host 127.0.0.1 --port 5178 --strictPort",
+       "build": "vite build"
      },
      "dependencies": {
        "@catalogo/ui": "workspace:*",
-       "vue": "^3.5.13",
-       "vue-router": "^4.5.0",
-       "pinia": "^3.0.1"
-     }
-   }
-   ```
-
-10. Instala `start-server-and-test` como dependencia de desarrollo de la aplicación:
-
-    ```bash
-    pnpm --filter @catalogo/web add -D start-server-and-test@2.0.8
-    ```
-
-11. Revisa que MSW siga inicializándose exclusivamente en desarrollo. En `apps/web/src/main.ts`, la lógica debe conservar una condición equivalente a esta:
-
-    ```ts
-    async function enableMocking() {
-      if (!import.meta.env.DEV) return
-
-      const { worker } = await import('./mocks/browser')
-      return worker.start({
-        onUnhandledRequest: 'bypass'
-      })
-    }
-
-    enableMocking().then(() => {
-      createApp(App).use(router).use(pinia).mount('#app')
-    })
-    ```
-
-**Salida esperada:**
-
-La estructura inicial debe ser similar a:
-
-```text
-catalogo-platform/
-├── .github/
-│   └── workflows/
-├── apps/
-│   └── web/
-├── docs/
-│   ├── performance-report.md
-│   └── test-report.md
-├── packages/
-│   ├── config/
-│   └── ui/
-├── package.json
-└── pnpm-workspace.yaml
-```
-
-**Verificación:**
-
-```bash
-find . -maxdepth 3 -type d | sort
-test -f docs/performance-report.md && echo "Informe de rendimiento encontrado"
-```
-
-Debes confirmar que `docs/performance-report.md` existe antes de continuar. Este informe es un control obligatorio para la liberación.
-
----
-
-### Paso 2. Crear paquetes compartidos y establecer fronteras modulares
-
-**Objetivo:** Crear un paquete de interfaz reutilizable y un paquete de configuraciones compartidas, evitando dependencias inversas desde paquetes hacia la aplicación.
-
-**Instrucciones:**
-
-1. Crea `packages/ui/package.json`:
-
-   ```json
-   {
-     "name": "@catalogo/ui",
-     "version": "1.0.0",
-     "private": true,
-     "type": "module",
-     "exports": {
-       ".": "./src/index.ts"
-     },
-     "peerDependencies": {
-       "vue": "^3.5.13"
+       "vue": "3.5.13",
+       "vue-router": "4.5.0"
      },
      "devDependencies": {
-       "vue": "^3.5.13"
+       "@vitejs/plugin-vue": "5.2.3",
+       "vite": "~6.4.0",
+       "vite-plugin-vue-devtools": "7.7.2"
      }
    }
    ```
 
-2. Crea un componente visual reutilizable en `packages/ui/src/components/AppStatusBadge.vue`:
-
-   ```vue
-   <script setup lang="ts">
-   import { computed } from 'vue'
-
-   type Status = 'active' | 'inactive' | 'pending'
-
-   const props = defineProps<{
-     status: Status
-   }>()
-
-   const label = computed(() => {
-     const labels: Record<Status, string> = {
-       active: 'Activo',
-       inactive: 'Inactivo',
-       pending: 'Pendiente'
-     }
-
-     return labels[props.status]
-   })
-   </script>
-
-   <template>
-     <span class="app-status-badge" :data-status="status">
-       {{ label }}
-     </span>
-   </template>
-
-   <style scoped>
-   .app-status-badge {
-     display: inline-flex;
-     border-radius: 999px;
-     font-size: 0.75rem;
-     font-weight: 700;
-     padding: 0.25rem 0.6rem;
-   }
-
-   .app-status-badge[data-status="active"] {
-     background: #dcfce7;
-     color: #166534;
-   }
-
-   .app-status-badge[data-status="inactive"] {
-     background: #fee2e2;
-     color: #991b1b;
-   }
-
-   .app-status-badge[data-status="pending"] {
-     background: #fef3c7;
-     color: #92400e;
-   }
-   </style>
-   ```
-
-3. Crea la API pública del paquete en `packages/ui/src/index.ts`:
-
-   ```ts
-   export { default as AppStatusBadge } from './components/AppStatusBadge.vue'
-   ```
-
-4. Crea `packages/config/package.json`:
-
-   ```json
-   {
-     "name": "@catalogo/config",
-     "version": "1.0.0",
-     "private": true,
-     "type": "module",
-     "exports": {
-       "./eslint": "./eslint.config.js",
-       "./tsconfig": "./tsconfig.base.json",
-       "./vitest": "./vitest.config.ts"
-     }
-   }
-   ```
-
-5. Crea `packages/config/tsconfig.base.json`:
-
-   ```json
-   {
-     "compilerOptions": {
-       "target": "ES2020",
-       "module": "ESNext",
-       "moduleResolution": "Bundler",
-       "strict": true,
-       "isolatedModules": true,
-       "esModuleInterop": true,
-       "skipLibCheck": true,
-       "resolveJsonModule": true,
-       "noEmit": true
-     }
-   }
-   ```
-
-6. Crea `packages/config/eslint.config.js`:
+3. Reemplaza `apps/web/src/router/index.js` completo (create-vue lo trae con la lista de rutas vacía):
 
    ```js
-   import js from '@eslint/js'
-   import pluginVue from 'eslint-plugin-vue'
+   import { createRouter, createWebHistory } from 'vue-router'
+   import InicioVista from '@/vistas/InicioVista.vue' // @ es el atajo a src/ que trae vite.config.js
+   import CatalogoVista from '@/vistas/CatalogoVista.vue'
 
-   export default [
-     js.configs.recommended,
-     ...pluginVue.configs['flat/recommended'],
-     {
-       files: ['**/*.{ts,vue}'],
-       rules: {
-         'vue/multi-word-component-names': 'off'
-       }
-     },
-     {
-       ignores: ['dist/**', 'coverage/**', 'node_modules/**']
-     }
-   ]
-   ```
-
-7. Crea `packages/config/vitest.config.ts`:
-
-   ```ts
-   import { defineConfig } from 'vitest/config'
-
-   export default defineConfig({
-     test: {
-       environment: 'jsdom',
-       coverage: {
-         provider: 'v8',
-         reporter: ['text', 'json-summary', 'html'],
-         reportsDirectory: './coverage'
-       }
-     }
+   const router = createRouter({
+     history: createWebHistory(import.meta.env.BASE_URL), // URL limpias como /catalogo: Nginx tendrá que entenderlas
+     routes: [
+       { path: '/', component: InicioVista },
+       { path: '/catalogo', component: CatalogoVista }
+     ]
    })
+
+   export default router // main.js lo importa con import router from './router'
    ```
 
-8. Asegura que el paquete web pueda resolver el paquete interno. En `apps/web/vite.config.ts`, agrega o conserva un alias hacia la API pública:
+4. Las dos vistas. Inicio trae un botón que falla a propósito, para el paso 3; Catálogo trae datos de ejemplo (cópialos tal cual).
 
-   ```ts
-   import { fileURLToPath, URL } from 'node:url'
-   import { defineConfig } from 'vite'
-   import vue from '@vitejs/plugin-vue'
-
-   export default defineConfig({
-     plugins: [vue()],
-     resolve: {
-       alias: {
-         '@': fileURLToPath(new URL('./src', import.meta.url)),
-         '@catalogo/ui': fileURLToPath(
-           new URL('../../packages/ui/src/index.ts', import.meta.url)
-         )
-       }
-     }
-   })
-   ```
-
-9. Usa el componente compartido desde una vista o componente existente de Catalogo Pro:
+   `apps/web/src/vistas/InicioVista.vue`:
 
    ```vue
-   <script setup lang="ts">
-   import { AppStatusBadge } from '@catalogo/ui'
+   <script setup>
+   // Lanza un error para comprobar en el paso 3 que la observabilidad lo registra
+   function simularError() {
+     throw new Error('Error de prueba desde Inicio')
+   }
    </script>
 
    <template>
-     <section>
-       <h2>Estado del catálogo</h2>
-       <AppStatusBadge status="active" />
-     </section>
+     <h2>Inicio</h2>
+     <button type="button" @click="simularError">Simular error</button>
    </template>
    ```
 
-**Salida esperada:**
+   `apps/web/src/vistas/CatalogoVista.vue`:
 
-El paquete `@catalogo/ui` expone componentes exclusivamente mediante `src/index.ts`. La aplicación `@catalogo/web` consume el paquete sin importar rutas internas de `packages/ui`.
+   ```vue
+   <script setup>
+   import { EtiquetaEstado } from '@catalogo/ui' // nunca '@catalogo/ui/src/...'
 
-**Verificación:**
+   const productos = [
+     { id: 1, nombre: 'Teclado', estado: 'activo' },
+     { id: 2, nombre: 'Monitor', estado: 'agotado' },
+     { id: 3, nombre: 'Ratón', estado: 'pendiente' }
+   ]
+   </script>
 
-```bash
-pnpm install
-pnpm --filter @catalogo/web build
-```
-
-La compilación debe finalizar con una salida similar a:
-
-```text
-✓ built in ...s
-```
-
----
-
-### Paso 3. Documentar arquitectura, convenciones y ownership
-
-**Objetivo:** Dejar explícitas las reglas de organización, dependencia, responsabilidad y flujo de trabajo para evitar que el monorepo pierda modularidad.
-
-**Instrucciones:**
-
-1. Crea `docs/architecture.md`:
-
-   ```md
-   # Arquitectura de Catalogo Platform
-
-   ## Estructura
-
-   - `apps/web`: SPA desplegable Catalogo Pro.
-   - `packages/ui`: componentes visuales reutilizables y sin lógica de transporte.
-   - `packages/config`: configuraciones compartidas de TypeScript, ESLint y Vitest.
-   - `docs`: decisiones, reportes de rendimiento, calidad y runbooks.
-   - `.github/workflows`: automatización de integración continua y releases.
-
-   ## Convenciones de nombres
-
-   - Paquetes: `@catalogo/<responsabilidad>` en minúsculas y con guiones.
-   - Componentes Vue: PascalCase, por ejemplo `CatalogFilters.vue`.
-   - Composables: prefijo `use`, por ejemplo `useCatalogSearch.ts`.
-   - Stores Pinia: sufijo `Store`, por ejemplo `useCatalogStore`.
-   - Pruebas unitarias: `*.spec.ts`.
-   - Pruebas de componentes: `*.component.spec.ts`.
-   - Pruebas E2E: `cypress/e2e/*.cy.ts`.
-
-   ## Límites de responsabilidad
-
-   - Las aplicaciones pueden depender de paquetes compartidos.
-   - Los paquetes nunca importan desde `apps/`.
-   - `packages/ui` no realiza solicitudes HTTP, no accede a Router y no conoce stores de Pinia.
-   - La API pública de cada paquete se expone desde `src/index.ts`.
-   - No se permiten importaciones hacia rutas internas de otro paquete.
-
-   ## Ownership
-
-   | Área | Responsable |
-   |---|---|
-   | `apps/web/src/features` | Equipo de producto web |
-   | `apps/web/src/mocks` | Equipo de calidad frontend |
-   | `packages/ui` | Equipo de plataforma frontend |
-   | `packages/config` | Equipo de plataforma frontend |
-   | `.github/workflows` y Docker | Equipo de plataforma y release |
-   | `docs/` | Autor del cambio y revisor técnico |
-
-   ## Flujo Git
-
-   - La única rama persistente de trabajo es `main`.
-   - Los cambios se validan mediante pull requests efímeros cuando el repositorio remoto lo requiera.
-   - Los pull requests se integran mediante squash y se eliminan después de la integración.
-   - Toda publicación debe partir de un commit verificable de `main`.
-   - No se publica una imagen si fallan lint, pruebas, cobertura, build, Cypress o los controles documentados de rendimiento.
+   <template>
+     <h2>Catálogo</h2>
+     <ul>
+       <li v-for="producto in productos" :key="producto.id">
+         {{ producto.nombre }} <EtiquetaEstado :estado="producto.estado" />
+       </li>
+     </ul>
+   </template>
    ```
 
-2. Comprueba que no existan importaciones desde paquetes hacia la aplicación:
+5. Reemplaza `apps/web/src/App.vue` completo (create-vue lo trae con un solo `<h1>You did it!</h1>`):
+
+   ```vue
+   <template>
+     <h1>Catálogo Pro</h1>
+     <!-- aria-label nombra el menú para los lectores de pantalla -->
+     <nav aria-label="Principal">
+       <RouterLink to="/">Inicio</RouterLink> |
+       <RouterLink to="/catalogo">Catálogo</RouterLink>
+     </nav>
+     <main>
+       <RouterView />
+     </main>
+   </template>
+   ```
+
+6. **Primero, predice:** la app importa un `.vue` que vive fuera de ella, en `packages/ui`. ¿Compilará? Instala y compila desde la raíz:
 
    ```bash
-   grep -R "from ['\"]@catalogo/web" packages || true
-   grep -R "from ['\"].*apps/web" packages || true
+   pnpm install
+   pnpm build
    ```
 
-3. Añade el primer commit estructural:
+   **Qué debes ver:** `✓ built in` y unos segundos. Vite siguió el enlace de `workspace:*` hasta `packages/ui` y compiló el componente como si fuera de la app.
 
-   ```bash
-   git add .
-   git commit -m "chore: migrate catalogo pro to pnpm monorepo"
-   ```
+## Paso 3. Observabilidad y versión en el navegador (6 minutos)
 
-**Salida esperada:**
+**Qué vas a hacer y por qué:** en producción el silencio no prueba nada. Este módulo anota cada navegación con su duración, cada error que Vue atrapa y la versión desplegada, en la consola y en `localStorage` (el almacén del navegador que sobrevive a una recarga).
 
-El archivo `docs/architecture.md` documenta estructura, convenciones, límites, ownership y flujo de ramas.
+1. Crea `apps/web/src/observabilidad.js`:
 
-**Verificación:**
+   ```js
+   const CLAVE = 'catalogo-platform:observability' // nombre del registro en localStorage
+   const MAXIMO = 50 // solo los últimos 50 eventos, para no llenar el navegador
+   const version = import.meta.env.VITE_APP_VERSION ?? 'desarrollo' // la pone el build de Docker
 
-```bash
-git status
-git log --oneline -1
-```
-
-La salida debe indicar un árbol de trabajo limpio y un commit con el mensaje de migración.
-
----
-
-### Paso 4. Implementar observabilidad cliente y versionado de despliegue
-
-**Objetivo:** Registrar errores no controlados, duración de navegación y versión desplegada en consola estructurada y `localStorage`.
-
-**Instrucciones:**
-
-1. Crea `apps/web/src/shared/observability/clientObservability.ts`:
-
-   ```ts
-   import type { Router } from 'vue-router'
-
-   const STORAGE_KEY = 'catalogo-platform:observability'
-   const MAX_EVENTS = 50
-
-   type ObservabilityEvent = {
-     type: 'navigation' | 'error' | 'unhandledrejection'
-     timestamp: string
-     version: string
-     payload: Record<string, unknown>
+   function reportar(type, datos) {
+     const evento = { type, version, timestamp: new Date().toISOString(), ...datos }
+     console.info('[catalogo-observability]', evento) // se ve en la consola
+     const guardados = JSON.parse(localStorage.getItem(CLAVE) ?? '[]') // lo que ya había
+     localStorage.setItem(CLAVE, JSON.stringify([...guardados, evento].slice(-MAXIMO))) // agrega y recorta
    }
 
-   const version = import.meta.env.VITE_APP_VERSION || 'development'
-
-   function persist(event: ObservabilityEvent) {
-     const current = JSON.parse(
-       localStorage.getItem(STORAGE_KEY) ?? '[]'
-     ) as ObservabilityEvent[]
-
-     const next = [...current, event].slice(-MAX_EVENTS)
-     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-   }
-
-   function report(
-     type: ObservabilityEvent['type'],
-     payload: Record<string, unknown>
-   ) {
-     const event: ObservabilityEvent = {
-       type,
-       timestamp: new Date().toISOString(),
-       version,
-       payload
+   export function instalarObservabilidad(app, router) {
+     let inicio = 0
+     router.beforeEach(() => { inicio = performance.now() }) // arranca el cronómetro al salir
+     router.afterEach((to, from) => { // al llegar, reporta cuánto tardó
+       reportar('navigation', { from: from.fullPath, to: to.fullPath, durationMs: Math.round(performance.now() - inicio) })
+     })
+     app.config.errorHandler = (error, instancia, info) => { // todo error que Vue atrapa pasa por aquí
+       reportar('error', { message: error.message, info })
      }
-
-     console.info('[catalogo-observability]', event)
-     persist(event)
-   }
-
-   export function installClientObservability(router: Router) {
-     let navigationStartedAt = performance.now()
-
-     router.beforeEach(() => {
-       navigationStartedAt = performance.now()
-       return true
-     })
-
-     router.afterEach((to, from, failure) => {
-       report('navigation', {
-         from: from.fullPath,
-         to: to.fullPath,
-         durationMs: Math.round(performance.now() - navigationStartedAt),
-         status: failure ? 'failed' : 'completed'
-       })
-     })
-
-     window.addEventListener('error', (event) => {
-       report('error', {
-         message: event.message,
-         source: event.filename,
-         line: event.lineno,
-         column: event.colno
-       })
-     })
-
-     window.addEventListener('unhandledrejection', (event) => {
-       report('unhandledrejection', {
-         reason: String(event.reason)
-       })
-     })
-
-     report('navigation', {
-       event: 'application_started',
-       version
-     })
    }
    ```
 
-2. Integra el módulo en `apps/web/src/main.ts` antes de montar la aplicación:
+2. Reemplaza `apps/web/src/main.js` completo (el que trajo create-vue más dos líneas) para instalarlo **antes** de montar, así no se pierde la primera navegación:
 
-   ```ts
+   ```js
    import { createApp } from 'vue'
-   import { createPinia } from 'pinia'
    import App from './App.vue'
    import router from './router'
-   import { installClientObservability } from './shared/observability/clientObservability'
+   import { instalarObservabilidad } from './observabilidad.js' // nuevo
 
-   async function enableMocking() {
-     if (!import.meta.env.DEV) return
+   const app = createApp(App)
+   instalarObservabilidad(app, router) // nuevo: engancha el enrutador y el manejador de errores
 
-     const { worker } = await import('./mocks/browser')
-     return worker.start({
-       onUnhandledRequest: 'bypass'
-     })
-   }
+   app.use(router)
 
-   enableMocking().then(() => {
-     const app = createApp(App)
-     const pinia = createPinia()
-
-     installClientObservability(router)
-
-     app.use(pinia)
-     app.use(router)
-     app.mount('#app')
-   })
+   app.mount('#app')
    ```
 
-3. Crea `apps/web/.env.production`:
-
-   ```env
-   VITE_APP_VERSION=1.0.0
-   ```
-
-4. Añade una prueba mínima para el módulo, si tu configuración de Vitest ya soporta `jsdom`. Crea `apps/web/src/shared/observability/clientObservability.spec.ts`:
-
-   ```ts
-   import { beforeEach, describe, expect, it } from 'vitest'
-   import { createMemoryHistory, createRouter } from 'vue-router'
-   import { installClientObservability } from './clientObservability'
-
-   describe('installClientObservability', () => {
-     beforeEach(() => {
-       localStorage.clear()
-     })
-
-     it('registra eventos de navegación en localStorage', async () => {
-       const router = createRouter({
-         history: createMemoryHistory(),
-         routes: [
-           { path: '/', component: { template: '<div />' } },
-           { path: '/catalogo', component: { template: '<div />' } }
-         ]
-       })
-
-       installClientObservability(router)
-       await router.push('/catalogo')
-
-       const events = JSON.parse(
-         localStorage.getItem('catalogo-platform:observability') ?? '[]'
-       )
-
-       expect(events.length).toBeGreaterThan(0)
-       expect(events.some((event: { type: string }) => event.type === 'navigation')).toBe(true)
-     })
-   })
-   ```
-
-5. Ejecuta la aplicación en el puerto obligatorio:
+3. **Primero, predice:** ¿qué `version` dirá el evento en desarrollo? Arranca y abre `http://127.0.0.1:5178` en Chrome con la consola abierta (F12):
 
    ```bash
-   pnpm --filter @catalogo/web dev -- --host 127.0.0.1 --port 5173
+   pnpm dev
    ```
 
-6. Abre `http://127.0.0.1:5173`, navega entre dos rutas y revisa la consola del navegador.
+   Pulsa **Catálogo**, luego **Inicio** y luego **Simular error**. En la consola escribe:
 
-**Salida esperada:**
+   ```js
+   JSON.parse(localStorage.getItem('catalogo-platform:observability'))
+   ```
 
-La consola del navegador debe mostrar eventos estructurados similares a:
+   **Qué debes ver:** eventos `[catalogo-observability]` con `type: "navigation"`, `from`, `to`, `durationMs` y `version: "desarrollo"` (nadie fijó la versión; en el paso 4 la pone Docker), un evento `type: "error"` con el mensaje de prueba y, en Catálogo, las etiquetas de colores. Detén el servidor con Ctrl+C.
 
-```text
-[catalogo-observability] {
-  type: "navigation",
-  version: "development",
-  payload: {
-    from: "/",
-    to: "/catalogo",
-    durationMs: 12,
-    status: "completed"
-  }
-}
-```
+## Paso 4. Imagen Docker con Nginx, salud y versión (8 minutos)
 
-**Verificación:**
+**Qué vas a hacer y por qué:** se compila una vez y se promueve la misma imagen. La primera etapa compila con Node.js; la segunda lleva solo Nginx y lo compilado.
 
-En la consola de Chrome, ejecuta:
+1. En la raíz, crea `nginx.conf` y `.dockerignore` (este evita copiar lo que se regenera).
 
-```js
-JSON.parse(localStorage.getItem('catalogo-platform:observability'))
-```
-
-Debes observar una lista de eventos con `timestamp`, `version`, `type` y `payload`.
-
----
-
-### Paso 5. Crear la imagen Docker de producción con Nginx, healthcheck y caché
-
-**Objetivo:** Empaquetar la SPA compilada en una imagen Nginx con fallback SPA, endpoint `/health`, cabeceras de caché y metadatos de versión.
-
-**Instrucciones:**
-
-1. Crea `nginx.conf` en la raíz del monorepo:
+   `nginx.conf`:
 
    ```nginx
    server {
      listen 80;
-     server_name _;
      root /usr/share/nginx/html;
      index index.html;
-
-     add_header X-Content-Type-Options "nosniff" always;
-     add_header X-Frame-Options "SAMEORIGIN" always;
-     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
+     # ruta de salud: la consulta Docker para saber si el contenedor está sano
      location = /health {
-       access_log off;
        default_type text/plain;
-       add_header Cache-Control "no-store";
        return 200 "ok\n";
      }
-
-     location ~* \.(?:js|css|woff2?|png|jpg|jpeg|gif|svg|ico)$ {
-       try_files $uri =404;
-       expires 1y;
+     # archivos con huella en el nombre: el navegador los guarda un año
+     location /assets/ {
        add_header Cache-Control "public, max-age=31536000, immutable";
      }
-
+     # cualquier otra ruta, como /catalogo, la resuelve Vue Router desde index.html
      location / {
        try_files $uri $uri/ /index.html;
-       add_header Cache-Control "no-cache";
      }
    }
    ```
 
-2. Crea `Dockerfile` en la raíz:
+   `.dockerignore`:
 
-   ```dockerfile
-   FROM node:22.14.0-alpine AS build
-
-   WORKDIR /workspace
-
-   ARG APP_VERSION=development
-   ARG GIT_SHA=unknown
-
-   ENV VITE_APP_VERSION=${APP_VERSION}
-   ENV VITE_GIT_SHA=${GIT_SHA}
-
-   RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
-
-   COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-   COPY apps/web/package.json apps/web/package.json
-   COPY packages/ui/package.json packages/ui/package.json
-   COPY packages/config/package.json packages/config/package.json
-
-   RUN pnpm install --frozen-lockfile
-
-   COPY . .
-
-   RUN pnpm --filter @catalogo/web build
-
-   FROM nginx:1.27.3-alpine AS production
-
-   ARG APP_VERSION=development
-   ARG GIT_SHA=unknown
-
-   LABEL org.opencontainers.image.title="catalogo-platform"
-   LABEL org.opencontainers.image.version="${APP_VERSION}"
-   LABEL org.opencontainers.image.revision="${GIT_SHA}"
-
-   COPY nginx.conf /etc/nginx/conf.d/default.conf
-   COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
-
-   EXPOSE 80
-
-   HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-     CMD wget -q -O - http://127.0.0.1/health || exit 1
-   ```
-
-3. Crea `.dockerignore`:
-
-   ```dockerignore
+   ```text
    **/node_modules
    **/dist
-   **/coverage
    .git
-   .github
-   cypress/videos
-   cypress/screenshots
-   npm-debug.log
    ```
 
-4. Obtén la versión y SHA actuales:
+2. Crea `Dockerfile` (en un Dockerfile el comentario va en su propia línea):
+
+   ```dockerfile
+   # Etapa 1, build: Node.js instala y compila
+   FROM node:24.22.0-alpine AS build
+   # carpeta de trabajo dentro de la imagen
+   WORKDIR /app
+   # versión que llega con --build-arg; Vite la publica como VITE_APP_VERSION
+   ARG APP_VERSION=desarrollo
+   ENV VITE_APP_VERSION=$APP_VERSION
+   # copia el monorepo (.dockerignore excluye node_modules y dist)
+   COPY . .
+   # activa pnpm en la versión de packageManager e instala justo lo del bloqueo
+   RUN corepack enable && pnpm install --frozen-lockfile
+   # compila la app web: deja apps/web/dist
+   RUN pnpm --filter @catalogo/web build
+   # Etapa 2: solo Nginx y lo compilado
+   FROM nginx:1.27.3-alpine
+   # cada etapa empieza de cero, por eso el ARG se declara otra vez
+   ARG APP_VERSION=desarrollo
+   # etiqueta estándar para saber qué versión corre
+   LABEL org.opencontainers.image.version=$APP_VERSION
+   # configuración con /health y try_files
+   COPY nginx.conf /etc/nginx/conf.d/default.conf
+   # trae dist/ desde la etapa 1
+   COPY --from=build /app/apps/web/dist /usr/share/nginx/html
+   # cada 10 s Docker pregunta por /health; tres fallos seguidos = unhealthy
+   HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1/health || exit 1
+   ```
+
+3. **Primero, predice:** si pides `/catalogo` directo al servidor, sin pasar por Inicio, ¿responde 200 o 404? Construye, arranca, espera unos 15 segundos y consulta (en PowerShell escribe `curl.exe` en lugar de `curl`):
 
    ```bash
-   APP_VERSION=$(node -p "require('./apps/web/package.json').version")
-   GIT_SHA=$(git rev-parse --short=12 HEAD)
-
-   echo "$APP_VERSION"
-   echo "$GIT_SHA"
+   docker build --build-arg APP_VERSION=1.0.0 -t catalogo-platform:1.0.0 .
+   docker run -d --name catalogo-platform -p 8088:80 catalogo-platform:1.0.0
+   docker inspect --format "{{.State.Health.Status}}" catalogo-platform
+   curl -i http://127.0.0.1:8088/health
+   curl -I http://127.0.0.1:8088/catalogo
    ```
 
-5. Construye la imagen:
+   **Qué debes ver:** `healthy` (si dice `starting`, repite el `docker inspect` en 10 segundos), `HTTP/1.1 200 OK` con `ok` en `/health` y `200 OK` en `/catalogo` gracias a `try_files`. En Chrome, `http://127.0.0.1:8088/catalogo` muestra en la consola `version: "1.0.0"`.
 
-   ```bash
-   docker build \
-     --build-arg APP_VERSION="$APP_VERSION" \
-     --build-arg GIT_SHA="$GIT_SHA" \
-     -t "catalogo-platform:${APP_VERSION}" \
-     -t "catalogo-platform:${GIT_SHA}" \
-     .
-   ```
+## Paso 5. Pipeline de CI y release en GitHub Actions (6 minutos)
 
-6. Ejecuta el contenedor:
+**Qué vas a hacer y por qué:** la pipeline vuelve obligatorio lo que hiciste a mano. `ci.yml` revisa cada cambio en `main`; `release.yml` publica la imagen al subir una etiqueta.
 
-   ```bash
-   docker run -d \
-     --name catalogo-platform \
-     -p 8080:80 \
-     "catalogo-platform:${APP_VERSION}"
-   ```
+1. Crea los dos flujos. Los `run:` corren en la máquina Linux de GitHub con bash, no con PowerShell, aunque tú trabajes en Windows: por eso `release.yml` usa sintaxis de bash como `${GITHUB_REPOSITORY,,}` (pasa a minúsculas), `${GITHUB_REF_NAME#v}` (quita la `v` inicial) y `${GITHUB_SHA::12}` (toma los primeros 12 caracteres).
 
-7. Espera el healthcheck y consulta su estado:
-
-   ```bash
-   docker inspect \
-     --format='{{.State.Health.Status}}' \
-     catalogo-platform
-   ```
-
-**Salida esperada:**
-
-El estado de salud debe ser:
-
-```text
-healthy
-```
-
-**Verificación:**
-
-Ejecuta:
-
-```bash
-curl -i http://127.0.0.1:8080/health
-curl -I http://127.0.0.1:8080/assets/
-curl -I http://127.0.0.1:8080/
-docker images catalogo-platform
-```
-
-Verifica los siguientes criterios:
-
-- `/health` responde `200 OK` con contenido `ok`.
-- La ruta principal responde la SPA.
-- La imagen posee al menos una etiqueta semántica y una etiqueta basada en SHA.
-- Una ruta Vue, por ejemplo `/catalogo` o `/login`, responde `200` gracias al fallback SPA:
-
-  ```bash
-  curl -I http://127.0.0.1:8080/catalogo
-  ```
-
----
-
-### Paso 6. Crear la pipeline de integración continua
-
-**Objetivo:** Automatizar instalación, lint, pruebas unitarias, cobertura, build y Cypress para `push` y `pull_request` sobre `main`.
-
-**Instrucciones:**
-
-1. Crea `.github/workflows/ci.yml`:
+   `.github/workflows/ci.yml`:
 
    ```yaml
    name: CI
-
    on:
      push:
-       branches:
-         - main
+       branches: [main]                        # cada cambio que llega a main
      pull_request:
-       branches:
-         - main
-
-   concurrency:
-     group: ci-${{ github.workflow }}-${{ github.ref }}
-     cancel-in-progress: true
-
+       branches: [main]                        # y cada propuesta de cambio
    jobs:
-     quality:
-       name: Calidad, cobertura y build
-       runs-on: ubuntu-latest
-
+     calidad:
+       runs-on: ubuntu-latest                  # máquina Linux de GitHub
        steps:
-         - name: Obtener código
-           uses: actions/checkout@v4
-
-         - name: Configurar Node.js
-           uses: actions/setup-node@v4
+         - uses: actions/checkout@v4           # descarga el código
+         - uses: pnpm/action-setup@v4          # primero pnpm: lee la versión de packageManager
+         - uses: actions/setup-node@v4         # después Node.js
            with:
-             node-version: 22.14.0
-             cache: pnpm
-             cache-dependency-path: pnpm-lock.yaml
-
-         - name: Configurar pnpm
-           uses: pnpm/action-setup@v4
-           with:
-             version: 9.15.4
-             run_install: false
-
-         - name: Instalar dependencias
-           run: pnpm install --frozen-lockfile
-
-         - name: Validar lint
-           run: pnpm lint
-
-         - name: Ejecutar pruebas unitarias y de componentes
-           run: pnpm test
-
-         - name: Generar cobertura
-           run: pnpm test:coverage
-
-         - name: Compilar SPA
-           run: pnpm build
-
-         - name: Publicar resumen de cobertura
-           if: always()
-           uses: actions/upload-artifact@v4
-           with:
-             name: coverage-report
-             path: apps/web/coverage
-             if-no-files-found: warn
-
-         - name: Publicar build
-           if: success()
-           uses: actions/upload-artifact@v4
-           with:
-             name: web-dist
-             path: apps/web/dist
-             if-no-files-found: error
-
-     e2e:
-       name: Pruebas E2E Cypress
-       runs-on: ubuntu-latest
-       needs: quality
-
-       steps:
-         - name: Obtener código
-           uses: actions/checkout@v4
-
-         - name: Configurar Node.js
-           uses: actions/setup-node@v4
-           with:
-             node-version: 22.14.0
-             cache: pnpm
-             cache-dependency-path: pnpm-lock.yaml
-
-         - name: Configurar pnpm
-           uses: pnpm/action-setup@v4
-           with:
-             version: 9.15.4
-             run_install: false
-
-         - name: Instalar dependencias
-           run: pnpm install --frozen-lockfile
-
-         - name: Compilar SPA para Cypress
-           run: pnpm build
-
-         - name: Ejecutar Cypress
-           run: pnpm test:e2e
-
-         - name: Publicar evidencias Cypress
-           if: failure()
-           uses: actions/upload-artifact@v4
-           with:
-             name: cypress-artifacts
-             path: |
-               apps/web/cypress/screenshots
-               apps/web/cypress/videos
-             if-no-files-found: ignore
+             node-version: 24.22.0
+             cache: pnpm                       # reutiliza descargas; necesita pnpm ya instalado
+         - run: pnpm install --frozen-lockfile # instala justo lo del bloqueo
+         - run: pnpm test                      # las pruebas del paso 1
+         - run: pnpm build                     # compila la SPA
    ```
 
-2. Verifica que las pruebas E2E existan dentro de `apps/web/cypress/e2e/` o ajusta la ubicación configurada en `apps/web/cypress.config.ts`.
-
-3. Ejecuta localmente el conjunto de controles previos a CI:
-
-   ```bash
-   pnpm lint
-   pnpm test
-   pnpm test:coverage
-   pnpm build
-   pnpm test:e2e
-   ```
-
-4. Añade y confirma los cambios:
-
-   ```bash
-   git add .
-   git commit -m "ci: add quality and e2e workflow"
-   ```
-
-5. Si el repositorio remoto aún no existe, créalo con GitHub CLI:
-
-   ```bash
-   gh repo create catalogo-platform --private --source=. --remote=origin --push
-   ```
-
-   Si ya existe, configura el remoto y publica `main`:
-
-   ```bash
-   git remote add origin https://github.com/TU_USUARIO/catalogo-platform.git
-   git push -u origin main
-   ```
-
-**Salida esperada:**
-
-GitHub Actions debe iniciar dos jobs:
-
-```text
-Calidad, cobertura y build
-Pruebas E2E Cypress
-```
-
-**Verificación:**
-
-```bash
-gh run list --limit 5
-gh run watch
-```
-
-La ejecución más reciente debe finalizar con estado:
-
-```text
-completed success
-```
-
----
-
-### Paso 7. Crear la pipeline de release y el runbook de despliegue
-
-**Objetivo:** Construir una imagen versionada con el SHA Git exacto y la versión semántica de `apps/web/package.json`, además de documentar promoción y rollback.
-
-**Instrucciones:**
-
-1. Crea `.github/workflows/release.yml`:
+   `.github/workflows/release.yml`:
 
    ```yaml
    name: Release
-
    on:
      push:
-       tags:
-         - "v*.*.*"
-     workflow_dispatch:
-
+       tags: ['v*.*.*']                        # solo al subir una etiqueta como v1.0.0
    permissions:
      contents: read
-     packages: write
-
+     packages: write                           # sin esto, ghcr.io rechaza la publicación
    jobs:
-     release:
-       name: Construir y publicar imagen Docker
+     imagen:
        runs-on: ubuntu-latest
-
        steps:
-         - name: Obtener código
-           uses: actions/checkout@v4
-           with:
-             fetch-depth: 0
-
-         - name: Configurar Node.js
-           uses: actions/setup-node@v4
-           with:
-             node-version: 22.14.0
-
-         - name: Configurar pnpm
-           uses: pnpm/action-setup@v4
-           with:
-             version: 9.15.4
-             run_install: false
-
-         - name: Instalar dependencias
-           run: pnpm install --frozen-lockfile
-
-         - name: Ejecutar controles de release
-           run: |
-             pnpm lint
-             pnpm test:coverage
-             pnpm build
-
-         - name: Calcular metadatos de imagen
-           id: metadata
-           shell: bash
-           run: |
-             VERSION=$(node -p "require('./apps/web/package.json').version")
-             GIT_SHA=$(git rev-parse --short=12 HEAD)
-             IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/catalogo-platform"
-
-             echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-             echo "git_sha=${GIT_SHA}" >> "$GITHUB_OUTPUT"
-             echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
-
-         - name: Iniciar sesión en GitHub Container Registry
-           uses: docker/login-action@v3
+         - uses: actions/checkout@v4
+         - uses: docker/login-action@v3        # entra a ghcr.io con el token automático
            with:
              registry: ghcr.io
              username: ${{ github.actor }}
              password: ${{ secrets.GITHUB_TOKEN }}
-
-         - name: Configurar Buildx
-           uses: docker/setup-buildx-action@v3
-
-         - name: Construir y publicar imagen
-           uses: docker/build-push-action@v6
-           with:
-             context: .
-             push: true
-             build-args: |
-               APP_VERSION=${{ steps.metadata.outputs.version }}
-               GIT_SHA=${{ steps.metadata.outputs.git_sha }}
-             tags: |
-               ${{ steps.metadata.outputs.image }}:${{ steps.metadata.outputs.version }}
-               ${{ steps.metadata.outputs.image }}:${{ steps.metadata.outputs.git_sha }}
-             labels: |
-               org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
-               org.opencontainers.image.revision=${{ steps.metadata.outputs.git_sha }}
+         - name: Construir y publicar con versión y SHA
+           run: |
+             IMAGEN=ghcr.io/${GITHUB_REPOSITORY,,}   # dueño/repositorio en minúsculas
+             VERSION=${GITHUB_REF_NAME#v}             # v1.0.0 pasa a 1.0.0
+             SHA=${GITHUB_SHA::12}                    # 12 caracteres del commit
+             docker build --build-arg APP_VERSION="$VERSION" -t "$IMAGEN:$VERSION" -t "$IMAGEN:$SHA" .
+             docker push --all-tags "$IMAGEN"
    ```
 
-2. Crea `docs/deployment-runbook.md`:
-
-   ```md
-   # Runbook de despliegue de Catalogo Platform
-
-   ## Condiciones para promover una release
-
-   1. El commit debe existir en `main`.
-   2. La pipeline CI debe estar en estado exitoso.
-   3. Deben existir y estar revisados:
-      - `docs/performance-report.md`
-      - pruebas unitarias y de componentes
-      - pruebas E2E Cypress
-   4. No deben existir incidencias críticas abiertas de navegación, autenticación simulada, carga perezosa o manejo de errores.
-   5. La versión de `apps/web/package.json` debe cumplir Semantic Versioning.
-
-   ## Promoción
-
-   1. Actualizar la versión en `apps/web/package.json`.
-   2. Ejecutar localmente:
-      ```bash
-      pnpm lint
-      pnpm test:coverage
-      pnpm build
-      pnpm test:e2e
-      ```
-   3. Confirmar el cambio:
-      ```bash
-      git add apps/web/package.json pnpm-lock.yaml
-      git commit -m "chore(release): vX.Y.Z"
-      git push origin main
-      ```
-   4. Crear y publicar la etiqueta:
-      ```bash
-      git tag -a vX.Y.Z -m "Release vX.Y.Z"
-      git push origin vX.Y.Z
-      ```
-   5. Verificar la ejecución del workflow `Release`.
-   6. Registrar la etiqueta de imagen publicada:
-      - `ghcr.io/<organizacion>/catalogo-platform:X.Y.Z`
-      - `ghcr.io/<organizacion>/catalogo-platform:<git-sha>`
-
-   ## Verificación post-despliegue
-
-   1. Comprobar salud:
-      ```bash
-      curl -i https://DOMINIO/health
-      ```
-   2. Confirmar respuesta `200` y cuerpo `ok`.
-   3. Abrir la SPA y verificar:
-      - carga de ruta inicial;
-      - navegación directa a una ruta protegida;
-      - fallback SPA tras recargar una ruta interna;
-      - ausencia de errores no controlados en consola;
-      - presencia de eventos `catalogo-observability`.
-   4. Revisar cabeceras de assets hash:
-      ```bash
-      curl -I https://DOMINIO/assets/ARCHIVO-HASH.js
-      ```
-   5. Confirmar `Cache-Control: public, max-age=31536000, immutable`.
-
-   ## Criterios para detener una publicación
-
-   Detener o revertir la publicación si ocurre cualquiera de estas condiciones:
-
-   - `/health` no devuelve `200`.
-   - La SPA no carga o falla el fallback de rutas.
-   - Se detectan errores no controlados repetidos en observabilidad.
-   - Fallan pruebas E2E críticas de autenticación, navegación o catálogo.
-   - El informe de rendimiento no cumple el presupuesto acordado.
-   - La versión desplegada no corresponde con el tag Git o el SHA esperado.
-
-   ## Rollback por imagen etiquetada
-
-   1. Identificar la última imagen estable:
-      ```bash
-      docker images ghcr.io/<organizacion>/catalogo-platform
-      ```
-   2. Detener la versión defectuosa:
-      ```bash
-      docker stop catalogo-platform
-      docker rm catalogo-platform
-      ```
-   3. Descargar y ejecutar la imagen estable anterior:
-      ```bash
-      docker pull ghcr.io/<organizacion>/catalogo-platform:X.Y.Z-ANTERIOR
-
-      docker run -d \
-        --name catalogo-platform \
-        --restart unless-stopped \
-        -p 8080:80 \
-        ghcr.io/<organizacion>/catalogo-platform:X.Y.Z-ANTERIOR
-      ```
-   4. Validar:
-      ```bash
-      curl -i http://127.0.0.1:8080/health
-      docker inspect --format='{{.State.Health.Status}}' catalogo-platform
-      ```
-   5. Registrar la causa, la versión revertida, la versión restaurada y la evidencia de verificación.
-   ```
-
-3. Crea una etiqueta semántica de prueba. Usa una versión que coincida con `apps/web/package.json`:
+2. **Primero, predice:** al subir a `main`, ¿corre también Release? Guarda, crea tu repositorio privado y súbelo:
 
    ```bash
-   APP_VERSION=$(node -p "require('./apps/web/package.json').version")
-
    git add .
-   git commit -m "release: add docker workflow and deployment runbook"
-   git tag -a "v${APP_VERSION}" -m "Release v${APP_VERSION}"
-   git push origin main --tags
+   git commit -m "feat: plataforma de catalogo"
+   gh repo create catalogo-platform --private --source=. --remote=origin --push
+   gh run list --limit 2
    ```
 
-4. Consulta la ejecución de release:
+3. No esperes a que CI termine: los dos flujos corren en paralelo en GitHub. Publica ya la versión con una etiqueta:
 
    ```bash
-   gh run list --workflow release.yml --limit 3
+   git tag -a v1.0.0 -m "Version 1.0.0"
+   git push origin v1.0.0
+   gh run list --limit 3
    ```
 
-**Salida esperada:**
+   **Qué debes ver:** el primer `gh run list` muestra solo CI, porque Release espera una etiqueta. El segundo muestra CI y Release en `in_progress` o `queued`; repite `gh run list --limit 3` cada minuto hasta ver los dos en `completed  success` (unos 2 a 3 minutos). En **Packages** de tu perfil de GitHub aparece `catalogo-platform` con las etiquetas `1.0.0` y el SHA de 12 caracteres.
 
-La pipeline de release publica dos etiquetas para la misma imagen:
+## Paso opcional: rollback por etiqueta (3 minutos)
 
-```text
-ghcr.io/<organizacion>/catalogo-platform:1.0.0
-ghcr.io/<organizacion>/catalogo-platform:<sha-git-de-12-caracteres>
-```
-
-**Verificación:**
-
-Comprueba que el workflow esté finalizado correctamente:
+Volver atrás es pedir la imagen anterior por su nombre, sin recompilar. Simula una versión 1.1.0 y regresa a la 1.0.0:
 
 ```bash
-gh run watch
+docker build --build-arg APP_VERSION=1.1.0 -t catalogo-platform:1.1.0 .
+docker rm -f catalogo-platform
+docker run -d --name catalogo-platform -p 8088:80 catalogo-platform:1.1.0
+docker rm -f catalogo-platform
+docker run -d --name catalogo-platform -p 8088:80 catalogo-platform:1.0.0
+docker inspect --format "{{.Config.Labels}}" catalogo-platform
 ```
 
-Si tienes permisos sobre GitHub Container Registry, lista paquetes publicados desde la interfaz de GitHub o con:
+**Qué debes ver:** entre las etiquetas, `org.opencontainers.image.version:1.0.0`. El segundo `docker build` tardó casi lo mismo que el primero: al cambiar `APP_VERSION` cambia el `ENV` de la etapa 1, y desde ahí Docker repite `COPY` e `install`; solo reutiliza las imágenes base. El rollback, en cambio, fue inmediato: no compiló nada, solo arrancó la imagen 1.0.0 que ya existía.
+
+## Resultado esperado
+
+- Monorepo con `apps/web`, `packages/ui` y `packages/config`; `pnpm build` termina con `✓ built in`.
+- Consola con eventos `[catalogo-observability]` de navegación y error, con la versión.
+- Contenedor `healthy`: `/health` y `/catalogo` responden 200.
+- CI en `completed success` y la imagen publicada con las etiquetas `1.0.0` y SHA.
+
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
 
 ```bash
-gh api user/packages?package_type=container
+cd ejercicio-resuelto
+npm install -g pnpm@9.15.4   # instala pnpm en la versión del curso (si ya lo hiciste en la Preparación, sáltalo)
+pnpm install                 # instala las dependencias de todo el monorrepositorio
+pnpm dev                     # arranca la aplicación en http://127.0.0.1:5178
 ```
 
-## Validación y pruebas
+## Problemas frecuentes
 
-Ejecuta esta secuencia final desde la raíz del monorepo:
+| Mensaje | Causa y arreglo |
+|---|---|
+| `pnpm.ps1 cannot be loaded because running scripts is disabled on this system` | PowerShell bloquea scripts. Ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` o escribe `pnpm.cmd`. |
+| `Port 5178 is already in use` | Otro servidor ocupa el puerto. Ciérralo con Ctrl+C en su terminal. |
+| `Bind for 0.0.0.0:8088 failed: port is already allocated` o `/health` responde algo que no es `ok` | Otro programa usa el puerto 8088 en tu equipo. Borra el contenedor con `docker rm -f catalogo-platform` y arráncalo con otro puerto, por ejemplo `-p 8089:80`, y usa ese puerto en `curl` y en Chrome. |
+| create-vue pregunta `Package name:` o falla con `ERR_TTY_INIT_FAILED` | Lo lanzaste con `apps/web` como nombre: con `/` no es un nombre de paquete válido. Borra la carpeta si se creó, entra a `apps` y ejecuta `npx --yes create-vue@3.16.4 web --bare --router`. |
+| Avisos `EBADENGINE` o `Vite requires Node.js version ...` | Usaste `create-vue@latest`: las versiones nuevas traen Vite 7 y piden un Node.js más reciente que el del aula. Crea la app otra vez con `create-vue@3.16.4`. |
+| `Failed to resolve import "@catalogo/ui"` | Agregaste la dependencia y no corriste `pnpm install`. |
+| `Missing "./src/estado.js" specifier in "@catalogo/ui" package` | Importaste una ruta interna. Importa desde `@catalogo/ui`. |
+| `Error: Cannot find matching keyid` al ejecutar `pnpm` | Corriste `corepack enable` con un Node.js 22 anterior a 22.14: su Corepack trae llaves de firma viejas y no puede bajar pnpm. Ejecuta `corepack disable pnpm` y luego `npm install -g pnpm@9.15.4`. |
+| `ERR_PNPM_OUTDATED_LOCKFILE` al construir la imagen | Cambiaste un `package.json` sin actualizar el bloqueo. Corre `pnpm install` y vuelve a construir. |
+| `failed to connect to the docker API` o `error during connect` | Docker Desktop está cerrado. Ábrelo y espera *Engine running*. |
+| `WARN GET https://registry.npmjs.org/... error (ETIMEDOUT)` durante `docker build` | La red del contenedor va lenta. pnpm reintenta solo; espera a ver `Done in`. Si falla del todo, repite el `docker build`. |
+| `/catalogo` devuelve `404 Not Found` en el contenedor | Falta `try_files` o no se copió `nginx.conf`. Revisa el `COPY` de la etapa 2 y reconstruye. |
+| `Author identity unknown` al hacer commit | `git config --global user.name "Tu Nombre"` y `git config --global user.email "tu@correo"`. |
+| `refusing to allow an OAuth App to create or update workflow ... without workflow scope` | Tu sesión de `gh` no puede subir flujos. Ejecuta `gh auth refresh -s workflow` y repite el `git push`. |
+| `Unable to locate executable file: pnpm` en GitHub | `setup-node` quedó antes de `pnpm/action-setup`. Invierte el orden. |
+| `denied: installation not allowed` o `permission_denied: write_package` | Falta `packages: write` en `permissions` de `release.yml`. |
 
-```bash
-pnpm install --frozen-lockfile
-pnpm lint
-pnpm test
-pnpm test:coverage
-pnpm build
-pnpm test:e2e
-```
+Con `pnpm dev` corriendo, al guardar un archivo Vite recarga en caliente y la pantalla puede volver a Inicio; los eventos de `localStorage` se conservan.
 
-Después, valida la imagen local:
-
-```bash
-APP_VERSION=$(node -p "require('./apps/web/package.json').version")
-GIT_SHA=$(git rev-parse --short=12 HEAD)
-
-docker build \
-  --build-arg APP_VERSION="$APP_VERSION" \
-  --build-arg GIT_SHA="$GIT_SHA" \
-  -t "catalogo-platform:${APP_VERSION}" \
-  .
-
-docker rm -f catalogo-platform 2>/dev/null || true
-
-docker run -d \
-  --name catalogo-platform \
-  -p 8080:80 \
-  "catalogo-platform:${APP_VERSION}"
-
-sleep 12
-
-docker inspect --format='{{.State.Health.Status}}' catalogo-platform
-curl -fsS http://127.0.0.1:8080/health
-curl -I http://127.0.0.1:8080/
-curl -I http://127.0.0.1:8080/catalogo
-```
-
-### Lista de comprobación final
-
-- [ ] El repositorio está ubicado en `/workspace/vue-intermedio/catalogo-platform`.
-- [ ] Existe `pnpm-workspace.yaml` con `apps/*` y `packages/*`.
-- [ ] La SPA reside en `apps/web`.
-- [ ] Existe el paquete `@catalogo/ui` con API pública en `src/index.ts`.
-- [ ] Existe el paquete `@catalogo/config`.
-- [ ] `docs/architecture.md` define ownership, convenciones y límites de dependencia.
-- [ ] `docs/performance-report.md` está presente.
-- [ ] Las pruebas del laboratorio 07 siguen ejecutándose.
-- [ ] `pnpm lint`, `pnpm test:coverage`, `pnpm build` y `pnpm test:e2e` finalizan correctamente.
-- [ ] `.github/workflows/ci.yml` se ejecuta para `push` y `pull_request` sobre `main`.
-- [ ] `.github/workflows/release.yml` publica etiquetas de versión y SHA.
-- [ ] La imagen usa `nginx:1.27.3-alpine`.
-- [ ] `/health` responde `200 OK`.
-- [ ] La SPA funciona tras acceder directamente a una ruta interna.
-- [ ] Los assets hash reciben caché inmutable.
-- [ ] La observabilidad registra navegación, errores no controlados y versión.
-- [ ] `docs/deployment-runbook.md` documenta promoción, detención y rollback.
-
-## Solución de problemas
-
-### Problema 1: Cypress falla en CI con error de conexión a `http://127.0.0.1:4173`
-
-**Síntomas:**
-
-```text
-Error: Timed out waiting for: http://127.0.0.1:4173
-```
-
-o Cypress indica que no puede acceder a la aplicación.
-
-**Causa:**
-
-La SPA no se compiló antes de ejecutar `vite preview`, el script `test:e2e` usa un puerto distinto, o la configuración de Cypress apunta a otra URL base.
-
-**Solución:**
-
-1. Comprueba que el build se genera correctamente:
-
-   ```bash
-   pnpm build
-   ls -la apps/web/dist
-   ```
-
-2. Verifica que `apps/web/package.json` use el puerto `4173` en `test:e2e`:
-
-   ```json
-   "test:e2e": "start-server-and-test \"vite preview --host 127.0.0.1 --port 4173\" http://127.0.0.1:4173 \"cypress run\""
-   ```
-
-3. En `apps/web/cypress.config.ts`, confirma que la URL base coincida:
-
-   ```ts
-   e2e: {
-     baseUrl: 'http://127.0.0.1:4173'
-   }
-   ```
-
-4. Repite la prueba local:
-
-   ```bash
-   pnpm --filter @catalogo/web test:e2e
-   ```
-
-### Problema 2: El contenedor responde en `/`, pero una ruta Vue como `/catalogo` devuelve `404`
-
-**Síntomas:**
-
-```bash
-curl -I http://127.0.0.1:8080/catalogo
-```
-
-produce:
-
-```text
-HTTP/1.1 404 Not Found
-```
-
-**Causa:**
-
-La configuración Nginx no incluye fallback SPA o el archivo `nginx.conf` no fue copiado a `/etc/nginx/conf.d/default.conf` durante la construcción de la imagen.
-
-**Solución:**
-
-1. Verifica que `nginx.conf` contenga:
-
-   ```nginx
-   location / {
-     try_files $uri $uri/ /index.html;
-   }
-   ```
-
-2. Comprueba que el Dockerfile copie la configuración:
-
-   ```dockerfile
-   COPY nginx.conf /etc/nginx/conf.d/default.conf
-   ```
-
-3. Reconstruye la imagen sin caché:
-
-   ```bash
-   docker build --no-cache -t catalogo-platform:local .
-   ```
-
-4. Recrea el contenedor:
-
-   ```bash
-   docker rm -f catalogo-platform
-   docker run -d --name catalogo-platform -p 8080:80 catalogo-platform:local
-   ```
-
-5. Valida nuevamente:
-
-   ```bash
-   curl -I http://127.0.0.1:8080/catalogo
-   ```
-
-## Limpieza
-
-Detén y elimina el contenedor local:
+## Limpieza (1 minuto)
 
 ```bash
 docker rm -f catalogo-platform
+docker rmi catalogo-platform:1.0.0 catalogo-platform:1.1.0
 ```
 
-Elimina las imágenes locales creadas durante el laboratorio, si ya no las necesitas:
+Si no hiciste el paso opcional, quita `catalogo-platform:1.1.0` del segundo comando. Si no quieres conservar el repositorio en GitHub, bórralo desde **Settings > Delete this repository**.
 
-```bash
-docker images catalogo-platform
-docker rmi catalogo-platform:local 2>/dev/null || true
+## Ejercicios de reserva
+
+**Básico.** Agrega el estado `descontinuado` (texto `Descontinuado`) y una prueba que lo compruebe.
+
+<details><summary>Solución</summary>
+
+En `estado.js`, suma `descontinuado: 'Descontinuado'` a `ETIQUETAS`. En `estado.test.js`, dentro del `describe`:
+
+```js
+it('traduce descontinuado', () => {
+  expect(etiquetaDeEstado('descontinuado')).toBe('Descontinuado')
+})
 ```
 
-Para conservar el repositorio y liberar espacio de dependencias, elimina únicamente los directorios `node_modules`:
+</details>
 
-```bash
-rm -rf node_modules apps/web/node_modules packages/ui/node_modules packages/config/node_modules
+**Medio.** Haz que la imagen no reinstale dependencias cuando solo cambia el código.
+
+<details><summary>Solución</summary>
+
+En la etapa 1, reemplaza `COPY . .` y el `RUN corepack ...` por:
+
+```dockerfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+COPY packages/ui/package.json packages/ui/
+COPY packages/config/package.json packages/config/
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY . .
 ```
 
-No elimines los siguientes artefactos, ya que forman parte del resultado del laboratorio:
+</details>
 
-```text
-docs/performance-report.md
-docs/architecture.md
-docs/deployment-runbook.md
-.github/workflows/ci.yml
-.github/workflows/release.yml
-Dockerfile
-nginx.conf
-pnpm-lock.yaml
+**Avanzado.** En `ci.yml`, guarda la carpeta compilada como artefacto `web-dist` para que un despliegue la descargue sin recompilar.
+
+<details><summary>Solución</summary>
+
+Al final de los `steps` del trabajo `calidad`:
+
+```yaml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
 ```
 
-## Resumen
+</details>
 
-Has convertido Catalogo Pro en una plataforma Vue escalable con un monorepo `pnpm`, una aplicación desplegable en `apps/web`, paquetes internos con fronteras explícitas y documentación de ownership. También implementaste controles de calidad automatizados, observabilidad cliente, una imagen Docker versionada con Nginx, healthcheck, caché de assets y fallback SPA.
+Cada archivo que escribes aparece completo una sola vez. `apps/web/src/main.js` sale de create-vue y su versión final es la del paso 3. `index.html`, `vite.config.js`, `jsconfig.json`, `public/favicon.ico`, `.gitignore`, `README.md` y `.vscode/` de `apps/web` salen de create-vue sin cambios.
 
-La plataforma resultante permite promover releases con etiquetas semánticas y SHA Git, verificar el despliegue mediante `/health`, diagnosticar errores desde el navegador y volver de forma controlada a una imagen estable anterior cuando se incumplen los criterios de calidad o disponibilidad.
+## Recursos
+
+- Espacios de trabajo de pnpm: https://pnpm.io/workspaces
+- Variables y modos de Vite: https://vite.dev/guide/env-and-mode
+- Sintaxis de GitHub Actions: https://docs.github.com/es/actions
+- Manejador global de errores de Vue: https://vuejs.org/api/application.html#app-config-errorhandler
+
+## Control de cambios
+
+| Versión | Fecha | Autor | Cambio |
+|---|---|---|---|
+| 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita desde carpeta vacía con todo el código; validada por CLI en Windows 11 y Linux; puerto 8088 para el contenedor; `npm install -g pnpm@9.15.4` en lugar de `corepack enable` en el equipo |
+| 2.1 | 2026-10-17 | Andrés Eduardo García Márquez | `apps/web` se crea con create-vue, la herramienta oficial que enseñan los manuales: `npx --yes create-vue@3.16.4 web --bare --router` dentro de `apps/` (con `apps/web` como nombre pregunta el nombre del paquete); el enrutador pasa a `src/router/index.js` con el atajo `@`; `main.js` de create-vue se conserva en el paso 2; nada se borra; `ejercicio-resuelto/` rehecho siguiendo la guía; validada paso a paso en Windows 11, incluido `docker build`, y con la pasada final en Linux |

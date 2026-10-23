@@ -1,0 +1,47 @@
+name: Validar laboratorios
+
+on:
+  push:
+    branches: [ changes_course, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ejercicio-resuelto:
+    name: Capítulo ${{ matrix.capitulo }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        capitulo: [ "01", "02", "03", "04", "05", "06", "07" ]
+    defaults:
+      run:
+        working-directory: Capitulo${{ matrix.capitulo }}/ejercicio-resuelto
+    env:
+      CYPRESS_INSTALL_BINARY: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.0
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Pruebas unitarias (capítulo 7)
+        if: matrix.capitulo == '07'
+        run: npm run test:run
+
+  monorrepositorio:
+    name: Capítulo 08
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Capitulo08/ejercicio-resuelto
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.0
+      - run: npm install -g pnpm@9.15.4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build

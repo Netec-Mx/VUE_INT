@@ -1,0 +1,43 @@
+# Dependencias y caché de los gestores de paquetes
+node_modules
+.pnpm-store/
+.npm/
+.yarn/
+.cache/
+.vite/
+
+# Resultados de compilación y de pruebas
+dist/
+dist-ssr/
+build/
+coverage/
+cypress/videos/
+cypress/screenshots/
+cypress/downloads/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.lighthouseci/
+
+# Variables de entorno locales (nunca se suben)
+.env.local
+.env.*.local
+
+# Registros
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+
+# Herramientas locales de trabajo
+.memsearch/

@@ -1,0 +1,24 @@
+// Plugin: Pinia lo llama una vez por cada tienda que nace, con la tienda y sus opciones
+export function persistPlugin({ store, options }) {
+  const persist = options.persist                    // la política que declaró la tienda, si tiene
+  if (!persist) return                               // sin política: no hace nada
+
+  try {                                              // leer puede fallar
+    const saved = localStorage.getItem(persist.key)  // el texto guardado con su nombre (key)
+    if (saved) store.$patch(JSON.parse(saved))       // hidratar: lo devuelve a la tienda
+  } catch {                                          // texto dañado...
+    localStorage.removeItem(persist.key)             // ...se borra para no fallar en cada carga
+  }
+
+  store.$subscribe((mutation, state) => {            // Pinia avisa cada vez que cambian los datos
+    const chosen = {}                                // aquí va solo lo permitido
+    for (const key of persist.paths) {               // recorre la lista paths
+      chosen[key] = state[key]                       // copia solo esa clave
+    }
+    try {
+      localStorage.setItem(persist.key, JSON.stringify(chosen)) // lo guarda como texto JSON
+    } catch {
+      // almacenamiento lleno o bloqueado: la aplicación sigue, solo no recuerda el cambio
+    }
+  }, { detached: true })                             // sin detached, la suscripción muere al desmontarse el componente que creó la tienda (aquí, la vista de login o de proyectos)
+}

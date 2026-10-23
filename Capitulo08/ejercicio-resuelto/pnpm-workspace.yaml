@@ -1,0 +1,4 @@
+# cada carpeta dentro de apps/ y packages/ es un paquete del monorepo
+packages:
+  - "apps/*"
+  - "packages/*"

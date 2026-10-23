@@ -1,1623 +1,843 @@
-# 4 Practica: aplicar optimizaciones y medir mejoras en una SPA real
-
-## Metadatos
+<!-- Idioma: es-CO -->
+# Práctica 6.4: aplicar optimizaciones y medir mejoras en una SPA real
 
 | Campo | Valor |
 |---|---|
 | Duración | 46 minutos |
-| Complejidad | Difícil |
-| Nivel de Bloom | Aplicar |
+| Complejidad | Media |
+| Nivel de Bloom | Aplicar y analizar |
 
-## Descripción general
+## De qué trata
 
-En este laboratorio se establecerá una línea base reproducible de rendimiento para la SPA **Catalogo Pro**, que contiene un catálogo de 2.000 productos, filtros reactivos, vistas de detalle, reportes y administración. Se analizarán los costes de carga y renderizado mediante Lighthouse, Chrome DevTools Performance y un analizador visual de bundles.
+Vas a construir **Catálogo Pro**, una SPA (aplicación de una sola página) con 2.000 productos, a medirla, a optimizarla y a volver a medirla. No se trata de que "se sienta" más rápida: al final tendrás un informe con el antes y el después. El número que más se nota: la página pasa de dibujar **2.000 filas** a dibujar **18**, aunque los 2.000 productos sigan en memoria.
 
-Posteriormente se aplicarán optimizaciones de entrega de JavaScript, carga diferida de rutas y activos, memoización de filtros, `v-memo` y virtual scrolling. Finalmente, se repetirá la medición bajo condiciones equivalentes y se documentarán los resultados en `docs/performance-report.md`.
+## Objetivos
 
-> **Importante:** este laboratorio utiliza el repositorio específico ubicado en `/workspace/vue-intermedio/catalogo-pro`. Aunque el directorio general del curso es `/workspace/vue-intermedio-labs`, para esta práctica debe respetarse la ruta indicada por el alcance del laboratorio.
+Al terminar podrás:
 
-## Objetivos de aprendizaje
+- Registrar una línea base con el peso del paquete, Lighthouse y la pestaña Rendimiento (Performance) de Chrome.
+- Sacar del paquete inicial las vistas que no se ven al entrar, con rutas diferidas y `manualChunks`.
+- Reducir el trabajo de dibujo con un filtro memoizado (`computed`), una lista virtual y `v-memo`.
+- Comparar y documentar el antes y el después en las mismas condiciones.
 
-Al completar el laboratorio, podrá:
+## Conceptos que usas
 
-- [ ] Registrar una línea base de bundle, FCP, LCP, TBT y puntuación Lighthouse en una SPA Vue.
-- [ ] Identificar recursos no críticos y trabajo de renderizado costoso usando Network y Performance de Chrome DevTools.
-- [ ] Implementar carga perezosa de rutas y división manual de chunks con Vite y Rollup.
-- [ ] Reducir el trabajo de la lista de productos mediante virtual scrolling, `v-memo` y memoización de filtros.
-- [ ] Comparar y documentar métricas antes y después de la optimización con condiciones de medición equivalentes.
+Todos se vieron antes en el curso. Solo la forma de medir y las tres técnicas del capítulo 6 son nuevas hoy.
 
-## Prerrequisitos
-
-### Conocimientos requeridos
-
-- Componentes Vue 3, `props`, eventos, `ref`, `computed`, `watch` y ciclo de vida.
-- Sintaxis de `<script setup>` y Composition API.
-- Configuración básica de rutas con Vue Router.
-- Importaciones estáticas y dinámicas de módulos ES.
-- Uso básico de Chrome DevTools, especialmente los paneles **Network**, **Performance** y **Lighthouse**.
-- Comandos esenciales de Git, Node.js y pnpm.
-
-### Acceso y estado inicial requeridos
-
-- Repositorio inicial disponible en:
-
-  ```text
-  /workspace/vue-intermedio/catalogo-pro
-  ```
-
-  En Windows 11, use la ruta equivalente configurada por su entorno, por ejemplo:
-
-  ```text
-  C:\workspace\vue-intermedio\catalogo-pro
-  ```
-
-- Rama única de trabajo: `main`.
-- Node.js `22.14.0`.
-- pnpm `9.15.4`.
-- Google Chrome `132.0.6834.83` o superior.
-- Permisos para abrir los puertos `4173` y `5173`.
-- No iniciar ningún servicio en el puerto `3000`.
-
-## Entorno del laboratorio
-
-### Requisitos de hardware
-
-| Recurso | Mínimo | Recomendado |
-|---|---:|---:|
-| Arquitectura | x86_64 o Apple Silicon | x86_64 o Apple Silicon |
-| CPU | 2 núcleos a 2.0 GHz | 4 núcleos o más |
-| Memoria RAM | 8 GB | 16 GB |
-| Espacio libre | 5 GB | 10 GB |
-| Resolución | 1366 × 768 | 1920 × 1080 |
-
-### Software principal
-
-| Software | Versión esperada |
+| Concepto | Dónde se vio |
 |---|---|
-| Node.js | 22.14.0 |
-| pnpm | 9.15.4 |
-| Vue | 3.5.13 |
-| Vite | 6.1.0 |
-| Vue Router | 4.5.0 |
-| Lighthouse | 12.3.0 |
-| rollup-plugin-visualizer | 5.14.0 |
-| Google Chrome | 132.0.6834.83 o superior |
+| `ref`, `shallowRef`, `computed`, props y eventos | Capítulos 1 y 2 |
+| Vue Router, `RouterLink`, `RouterView` y rutas con `import()` | Capítulo 3 |
+| Pedir datos con `async`/`await` y un estado "cargando" | Capítulo 5 (repaso de hoy) |
+| Lighthouse, pestaña Rendimiento, `performance.mark()` y `measure()` | Tema 6.1 |
+| Fragmentos con `import()`, `manualChunks` y el visualizador del paquete | Tema 6.2 |
+| `computed` como memoización, lista virtual, `v-memo` y `v-once` | Tema 6.3 |
 
-### Preparación inicial
+## Antes de empezar
 
-Abra una terminal y ejecute los siguientes comandos:
+- **Node.js 24 LTS** (probado con 24.22.0), con npm 11. Compruébalo con `node -v`.
+- Google Chrome y Visual Studio Code (con la extensión **Vue (Official)** si la ofrece).
+- Conexión a internet para instalar los paquetes. Nada más: todo el código está en esta guía.
 
-```bash
-cd /workspace/vue-intermedio/catalogo-pro
+## Preparación (5 minutos)
 
-git branch --show-current
-node --version
-pnpm --version
-
-pnpm install
-```
-
-La salida esperada debe indicar la rama `main` y versiones compatibles con el laboratorio:
-
-```text
-main
-v22.14.0
-9.15.4
-```
-
-Cree el directorio que almacenará los artefactos de medición:
-
-```bash
-mkdir -p docs/performance-artifacts
-```
-
-En PowerShell de Windows:
-
-```powershell
-New-Item -ItemType Directory -Force docs/performance-artifacts
-```
-
-> **Condición de comparación:** use el mismo equipo, navegador, resolución, modo de incógnito, perfil de CPU y configuración de red para las mediciones baseline y optimizada. No compare una ejecución con caché caliente contra otra con caché fría.
-
----
-
-## Paso a paso
-
-### Paso 1. Inspeccionar el estado inicial de la SPA
-
-**Objetivo:** confirmar la estructura del proyecto, las rutas existentes y el estado inicial antes de modificar el código.
-
-**Instrucciones:**
-
-1. Revise los archivos principales del proyecto:
+1. Abre una terminal en una carpeta tuya de prácticas (por ejemplo, `labs-vue` en tus documentos) y crea el proyecto con **create-vue**, la herramienta oficial de Vue que viste en el capítulo 0. El comando es el mismo en Windows (PowerShell), macOS y Linux; `--yes` evita la pregunta `Ok to proceed?`:
 
    ```bash
-   find src -maxdepth 3 -type f | sort
+   npx --yes create-vue@3.16.4 catalogo-pro --bare --router
+   cd catalogo-pro
+   npm install
+   npm install -D rollup-plugin-visualizer@5.14.0
    ```
 
-   En Windows PowerShell:
+   - `--router` agrega Vue Router (capítulo 3) ya conectado a la aplicación; `--bare` deja el proyecto sin páginas de ejemplo. Con las dos opciones create-vue no hace preguntas.
+   - La versión va fija: 3.16.4 crea el proyecto con Vite 6, que funciona en Node 20, 22 y 24. Las versiones más nuevas piden Node 22.18 o superior.
+   - `rollup-plugin-visualizer` dibuja el mapa del paquete (tema 6.2). Es lo único que se instala aparte.
 
-   ```powershell
-   Get-ChildItem -Path src -Recurse -File | Select-Object -ExpandProperty FullName
-   ```
+2. Abre la carpeta en VS Code (`code .`) y mira lo que trae el proyecto. No hay que borrar nada:
 
-2. Identifique el archivo de configuración de Vite:
+   | Archivo | Qué hace | Qué haces con él |
+   |---|---|---|
+   | `src/main.js` | Crea la aplicación y activa el enrutador con `app.use(router)` | Nada: se queda tal cual |
+   | `src/router/index.js` | Enrutador con la lista de rutas vacía | Lo reemplazas en el paso 1 |
+   | `src/App.vue` | Componente raíz con un título `You did it!` | Lo reemplazas en el paso 1 |
+   | `vite.config.js` | Plugin de Vue, panel Vue DevTools en desarrollo y el atajo `@` para `src` | Lo reemplazas en el paso 3 |
+   | `public/favicon.ico` | Logotipo de Vue | Lo usas en el paso opcional |
 
-   ```bash
-   ls vite.config.*
-   ```
+3. En `index.html`, cambia `lang=""` por `lang="es"` y el título `Vite App` por `Catálogo Pro`.
 
-3. Abra el proyecto en Visual Studio Code:
+**Qué debes ver:** la terminal termina sin errores (`added ... packages`). Puede salir un aviso amarillo `npm warn`: no impide seguir.
 
-   ```bash
-   code .
-   ```
+## Paso 1. Construir la SPA de partida (9 minutos)
 
-4. Localice y revise:
-   - El archivo de rutas, normalmente `src/router/index.js` o `src/router/index.ts`.
-   - La vista de catálogo, normalmente `src/views/CatalogView.vue`.
-   - La vista de detalle, normalmente `src/views/ProductDetailView.vue`.
-   - La vista de reportes, normalmente `src/views/ReportsView.vue`.
-   - La vista administrativa, normalmente `src/views/AdminView.vue`.
-   - El componente que renderiza cada producto, si existe, por ejemplo `src/components/ProductRow.vue`.
+**Qué vas a hacer y por qué:** armar la aplicación tal como suele llegar a un proyecto real: funciona, pero dibuja todo y carga todo de entrada. Es la "línea base" que vas a medir.
 
-5. Inicie el servidor de desarrollo en el puerto obligatorio `5173`:
-
-   ```bash
-   pnpm run dev -- --host 127.0.0.1 --port 5173
-   ```
-
-6. Abra la aplicación en Chrome:
-
-   ```text
-   http://127.0.0.1:5173
-   ```
-
-7. Compruebe que:
-   - El catálogo muestra aproximadamente 2.000 productos.
-   - La búsqueda o filtros actualizan la lista.
-   - Las rutas de detalle, reportes y administración son accesibles.
-   - No hay errores visibles en la consola del navegador.
-
-**Salida esperada:**
-
-La SPA debe iniciar correctamente y permitir navegar por sus rutas. En la vista de catálogo, el navegador probablemente renderizará un número elevado de nodos de producto al mismo tiempo.
-
-**Verificación:**
-
-En Chrome DevTools, abra **Elements** y observe el árbol DOM del catálogo. Si se renderizan 2.000 filas o tarjetas simultáneamente, el escenario es adecuado para aplicar virtual scrolling.
-
----
-
-### Paso 2. Generar la compilación baseline y analizar el tamaño del bundle
-
-**Objetivo:** crear una compilación de referencia y registrar los archivos JavaScript y CSS entregados inicialmente.
-
-**Instrucciones:**
-
-1. Detenga el servidor de desarrollo con `Ctrl + C`.
-
-2. Cree la compilación de producción:
-
-   ```bash
-   pnpm run build
-   ```
-
-3. Revise el tamaño de los archivos generados:
-
-   ```bash
-   find dist/assets -type f -printf '%f\t%k KB\n' | sort
-   ```
-
-   En macOS, donde `find -printf` puede no estar disponible:
-
-   ```bash
-   du -h dist/assets/* | sort -h
-   ```
-
-   En PowerShell:
-
-   ```powershell
-   Get-ChildItem dist/assets -File |
-     Select-Object Name, @{Name="SizeKB"; Expression={[math]::Round($_.Length / 1KB, 2)}} |
-     Sort-Object SizeKB
-   ```
-
-4. Inicie la previsualización de producción en el puerto `4173`:
-
-   ```bash
-   pnpm run preview -- --host localhost --port 4173
-   ```
-
-5. Abra una ventana de incógnito de Chrome y acceda a:
-
-   ```text
-   http://localhost:4173
-   ```
-
-6. Abra Chrome DevTools con `F12` o `Ctrl+Shift+I`.
-
-7. En el panel **Network**:
-   - Active **Disable cache**.
-   - Seleccione la opción de red **Fast 3G** o el perfil definido por el instructor.
-   - Recargue la página con `Ctrl+Shift+R`.
-   - Ordene por la columna **Size**.
-   - Identifique el JavaScript principal y compruebe si reportes, administración o librerías de visualización están incluidos en la carga inicial.
-
-8. Registre en un archivo temporal los tamaños más relevantes:
-
-   ```bash
-   cat > docs/performance-artifacts/baseline-bundle.txt <<'EOF'
-   Fecha:
-   Commit:
-   Archivo JavaScript inicial principal:
-   Tamaño transferido:
-   Tamaño sin comprimir:
-   Archivos JavaScript iniciales:
-   Archivos CSS iniciales:
-   Observaciones:
-   EOF
-   ```
-
-**Salida esperada:**
-
-La compilación debe terminar sin errores. Es posible que el bundle inicial incluya código de vistas que no se necesitan en el catálogo, particularmente reportes, administración o dependencias de gráficos.
-
-**Verificación:**
-
-En **Network**, filtre por `JS`. Si al cargar `/` se descarga código asociado a `ReportsView`, `AdminView` o una librería de gráficos antes de visitar esas rutas, existe una oportunidad clara de aplicar code-splitting.
-
----
-
-### Paso 3. Medir la línea base con Lighthouse
-
-**Objetivo:** registrar métricas cuantitativas reproducibles de la versión no optimizada.
-
-**Instrucciones:**
-
-1. Mantenga el servidor de previsualización ejecutándose en:
-
-   ```text
-   http://localhost:4173
-   ```
-
-2. Cierre pestañas no relacionadas, extensiones que puedan interferir y aplicaciones intensivas en CPU.
-
-3. Ejecute Lighthouse desde una segunda terminal:
-
-   ```bash
-   pnpm exec lighthouse http://localhost:4173 \
-     --only-categories=performance \
-     --output=html \
-     --output=json \
-     --output-path=docs/performance-artifacts/lighthouse-baseline \
-     --chrome-flags="--headless=new --no-sandbox"
-   ```
-
-4. El comando generará, según el sistema, archivos similares a:
-
-   ```text
-   docs/performance-artifacts/lighthouse-baseline.report.html
-   docs/performance-artifacts/lighthouse-baseline.report.json
-   ```
-
-5. Abra el reporte HTML en Chrome:
-
-   ```bash
-   xdg-open docs/performance-artifacts/lighthouse-baseline.report.html
-   ```
-
-   En macOS:
-
-   ```bash
-   open docs/performance-artifacts/lighthouse-baseline.report.html
-   ```
-
-   En Windows PowerShell:
-
-   ```powershell
-   Start-Process docs/performance-artifacts/lighthouse-baseline.report.html
-   ```
-
-6. Registre en `docs/performance-artifacts/baseline-metrics.txt`:
-   - Puntuación de rendimiento.
-   - FCP.
-   - LCP.
-   - TBT.
-   - CLS.
-   - Speed Index.
-   - Oportunidades relevantes.
-   - Diagnósticos relacionados con JavaScript, imágenes o trabajo del hilo principal.
-
-   Puede crear el archivo con esta plantilla:
-
-   ```bash
-   cat > docs/performance-artifacts/baseline-metrics.txt <<'EOF'
-   Escenario: carga inicial de http://localhost:4173
-   Caché: deshabilitada
-   Navegador: Chrome
-   Perfil de red:
-   Perfil de CPU:
-
-   Performance score:
-   FCP:
-   LCP:
-   TBT:
-   CLS:
-   Speed Index:
-
-   Oportunidad dominante:
-   Diagnóstico dominante:
-   Hipótesis técnica:
-   EOF
-   ```
-
-**Salida esperada:**
-
-Lighthouse generará un informe HTML y otro JSON. Las métricas exactas dependerán del equipo, pero la aplicación baseline debe mostrar oportunidades relacionadas con JavaScript no utilizado, bundle inicial grande, imágenes sin optimización o trabajo excesivo del hilo principal.
-
-**Verificación:**
-
-La línea base queda validada cuando se conservan los dos reportes de Lighthouse y el archivo `baseline-metrics.txt` contiene las métricas de una ejecución identificable.
-
----
-
-### Paso 4. Identificar renderizados repetidos con Chrome DevTools Performance
-
-**Objetivo:** relacionar el retraso al filtrar productos con tareas largas, cálculo repetido y creación excesiva de DOM.
-
-**Instrucciones:**
-
-1. En Chrome, abra:
-
-   ```text
-   http://localhost:4173
-   ```
-
-2. Abra DevTools y seleccione **Performance**.
-
-3. En la configuración de captura:
-   - Active **Screenshots**.
-   - Active **Memory**, si está disponible.
-   - Configure CPU en **4× slowdown**.
-   - Mantenga la caché deshabilitada desde Network.
-
-4. Pulse **Record**.
-
-5. Espere a que cargue el catálogo.
-
-6. En el buscador, escriba una secuencia de varios caracteres, por ejemplo:
-
-   ```text
-   monitor
-   ```
-
-7. Cambie una vez el ordenamiento o un filtro adicional si la interfaz lo ofrece.
-
-8. Detenga la grabación.
-
-9. Analice la traza:
-   - Ubique los eventos de teclado.
-   - Identifique tareas superiores a 50 ms.
-   - Revise bloques amarillos de JavaScript en el hilo principal.
-   - Busque operaciones de estilo, layout o paint extensas.
-   - Verifique si se crean o actualizan cientos o miles de nodos DOM.
-   - Seleccione una tarea larga y revise la pila de llamadas.
-
-10. Anote los hallazgos en `docs/performance-artifacts/baseline-metrics.txt`. Ejemplo:
-
-   ```text
-   Evidencia DevTools:
-   - Al escribir en el filtro se observa una tarea de JavaScript de aproximadamente ___ ms.
-   - La lista genera o actualiza aproximadamente ___ nodos.
-   - La pila apunta a: filtro / ordenamiento / renderizado / componente.
-   - Hipótesis: el coste dominante es renderizar todos los productos filtrados.
-   ```
-
-11. Si el proyecto posee Vue Devtools, inspeccione el componente de catálogo y confirme si cambios en los filtros provocan actualizaciones de filas que no han cambiado.
-
-**Salida esperada:**
-
-La traza debe evidenciar trabajo del hilo principal asociado a filtrar, ordenar o renderizar la lista. En una lista de 2.000 elementos, el coste de crear y reconciliar todos los nodos suele ser más significativo que el filtrado aislado.
-
-**Verificación:**
-
-La hipótesis debe estar basada en evidencia observable. Una formulación válida es:
-
-> “Cada actualización de filtros recalcula resultados y vuelve a renderizar una lista extensa de productos; el hilo principal contiene tareas largas durante la interacción.”
-
-No concluya simplemente que “Vue es lento”; identifique el componente, operación o dependencia responsable.
-
----
-
-### Paso 5. Configurar el analizador visual de bundles
-
-**Objetivo:** visualizar la composición del bundle y comprobar posteriormente que las dependencias se separan en chunks razonables.
-
-**Instrucciones:**
-
-1. Instale el analizador como dependencia de desarrollo:
-
-   ```bash
-   pnpm add -D rollup-plugin-visualizer@5.14.0
-   ```
-
-2. Abra `vite.config.js` o `vite.config.ts`.
-
-3. Importe el plugin y añádalo a la configuración. Adapte la sintaxis al tipo de archivo existente.
-
-   Ejemplo para `vite.config.js`:
+1. Crea `src/datos/productos.js`. Es la "API" de los datos; cópialo tal cual, no es el tema de hoy:
 
    ```js
-   import { defineConfig } from 'vite'
-   import vue from '@vitejs/plugin-vue'
-   import { visualizer } from 'rollup-plugin-visualizer'
+   // Datos de ejemplo: cópialo tal cual, no es el tema de hoy
+   const TIPOS = ['Audio', 'Cómputo', 'Hogar', 'Oficina']         // cuatro tipos de producto que se repiten
+   const productos = Array.from({ length: 2000 }, (_, i) => ({    // crea 2.000 productos
+     id: i + 1,                                                   // identificador único: 1, 2, 3...
+     nombre: `Producto ${i + 1}`,                                 // nombre visible
+     tipo: TIPOS[i % 4],                                          // % es el residuo: reparte en los 4 tipos
+     precio: 10 + ((i * 37) % 490),                               // precio entre 10 y 499 dólares
+     stock: 5 + ((i * 13) % 45)                                   // unidades disponibles
+   }))
 
-   export default defineConfig({
-     plugins: [
-       vue(),
-       visualizer({
-         filename: 'docs/performance-artifacts/bundle-baseline.html',
-         template: 'treemap',
-         gzipSize: true,
-         brotliSize: true,
-         open: false,
-       }),
-     ],
-   })
+   // Repaso del capítulo 5: simula una API REST que responde en 300 ms
+   export function pedirProductos() {
+     return new Promise((resolver) =>                             // promesa: el resultado llega después
+       setTimeout(() => resolver([...productos]), 300))           // [...] entrega una copia, no la lista original
+   }
    ```
 
-4. Si el archivo ya contiene plugins o configuración, integre `visualizer(...)` sin eliminar la configuración existente.
+2. `src/main.js` no se toca: create-vue ya lo dejó con `app.use(router)`, que activa el enrutador.
 
-5. Ejecute una compilación:
-
-   ```bash
-   pnpm run build
-   ```
-
-6. Abra el reporte:
-
-   ```bash
-   xdg-open docs/performance-artifacts/bundle-baseline.html
-   ```
-
-   En macOS:
-
-   ```bash
-   open docs/performance-artifacts/bundle-baseline.html
-   ```
-
-   En Windows PowerShell:
-
-   ```powershell
-   Start-Process docs/performance-artifacts/bundle-baseline.html
-   ```
-
-7. Inspeccione el treemap y registre:
-   - El chunk de entrada más grande.
-   - Dependencias de Vue.
-   - Vue Router.
-   - Librerías de visualización o gráficos.
-   - Código de vistas no críticas incluido en la carga inicial.
-
-**Salida esperada:**
-
-Se genera `docs/performance-artifacts/bundle-baseline.html` con un treemap navegable. Antes de la optimización, el chunk inicial puede contener código de reportes o administración.
-
-**Verificación:**
-
-El analizador queda correctamente configurado si el reporte se vuelve a generar al ejecutar `pnpm run build`.
-
----
-
-### Paso 6. Aplicar carga perezosa a rutas no críticas
-
-**Objetivo:** evitar que las vistas de detalle, reportes y administración formen parte obligatoria del JavaScript inicial del catálogo.
-
-**Instrucciones:**
-
-1. Abra el archivo de rutas, por ejemplo:
-
-   ```text
-   src/router/index.js
-   ```
-
-2. Identifique importaciones estáticas similares a estas:
+3. Reemplaza todo `src/router/index.js` por este. Por ahora importa las tres vistas de entrada (así suele llegar un proyecto real):
 
    ```js
-   import CatalogView from '@/views/CatalogView.vue'
-   import ProductDetailView from '@/views/ProductDetailView.vue'
-   import ReportsView from '@/views/ReportsView.vue'
-   import AdminView from '@/views/AdminView.vue'
-   ```
+   import { createRouter, createWebHistory } from 'vue-router'    // funciones del enrutador
+   import CatalogoView from '../views/CatalogoView.vue'            // la vista de entrada sí va en el paquete inicial
+   import ReportesView from '../views/ReportesView.vue'            // hoy viaja en el paquete inicial
+   import AdminView from '../views/AdminView.vue'                  // también
 
-3. Mantenga estática únicamente la vista crítica de catálogo, si es la ruta inicial. Convierta las vistas no críticas a importaciones dinámicas:
-
-   ```js
-   import { createRouter, createWebHistory } from 'vue-router'
-   import CatalogView from '@/views/CatalogView.vue'
-
-   const router = createRouter({
-     history: createWebHistory(),
+   export default createRouter({
+     history: createWebHistory(import.meta.env.BASE_URL),          // direcciones limpias, sin #; BASE_URL vale '/'
      routes: [
-       {
-         path: '/',
-         name: 'catalog',
-         component: CatalogView,
-       },
-       {
-         path: '/products/:id',
-         name: 'product-detail',
-         component: () => import('@/views/ProductDetailView.vue'),
-       },
-       {
-         path: '/reports',
-         name: 'reports',
-         component: () => import('@/views/ReportsView.vue'),
-       },
-       {
-         path: '/admin',
-         name: 'admin',
-         component: () => import('@/views/AdminView.vue'),
-       },
-     ],
+       { path: '/', component: CatalogoView },                     // se necesita al abrir la página
+       { path: '/reportes', component: ReportesView },
+       { path: '/admin', component: AdminView }
+     ]
    })
-
-   export default router
    ```
 
-4. Si existen más rutas no críticas, aplique el mismo criterio: cargue de forma inicial únicamente lo indispensable para la ruta principal.
+4. Reemplaza todo `src/App.vue` por este:
 
-5. Añada un estado de carga visual para cambios de ruta, si la aplicación no tiene uno. Por ejemplo, en el componente raíz que contiene `RouterView`:
-
-   ```vue
+   ```html
    <template>
-     <RouterView v-slot="{ Component }">
-       <Suspense>
-         <component :is="Component" />
-
-         <template #fallback>
-           <p role="status">Cargando vista…</p>
-         </template>
-       </Suspense>
-     </RouterView>
-   </template>
-   ```
-
-   > Si el proyecto ya utiliza una estrategia de carga o transición de rutas, respétela. No introduzca `Suspense` si genera conflictos con la arquitectura existente.
-
-6. Compile el proyecto:
-
-   ```bash
-   pnpm run build
-   ```
-
-7. Revise `dist/assets`. Deben existir archivos separados asociados a vistas no críticas.
-
-**Salida esperada:**
-
-La compilación debe generar chunks independientes para detalle, reportes y administración. La ruta inicial no debe descargar esos chunks hasta que el usuario navegue a la ruta correspondiente.
-
-**Verificación:**
-
-1. Inicie la previsualización:
-
-   ```bash
-   pnpm run preview -- --host localhost --port 4173
-   ```
-
-2. Abra DevTools > **Network** y filtre por `JS`.
-
-3. Recargue `/` con caché deshabilitada.
-
-4. Confirme que el chunk de reportes no se descarga inicialmente.
-
-5. Navegue a:
-
-   ```text
-   http://localhost:4173/reports
-   ```
-
-6. Confirme que el chunk de reportes se solicita al navegar por primera vez.
-
----
-
-### Paso 7. Separar dependencias mediante `manualChunks`
-
-**Objetivo:** mejorar la organización de la caché y evitar que dependencias de distinta frecuencia de cambio queden agrupadas sin criterio.
-
-**Instrucciones:**
-
-1. Abra `vite.config.js` o `vite.config.ts`.
-
-2. Añada la configuración `build.rollupOptions.output.manualChunks`.
-
-3. Use la siguiente configuración como base. Ajuste los nombres de paquetes de visualización según las dependencias reales del proyecto:
-
-   ```js
-   import { defineConfig } from 'vite'
-   import vue from '@vitejs/plugin-vue'
-   import { visualizer } from 'rollup-plugin-visualizer'
-
-   export default defineConfig({
-     plugins: [
-       vue(),
-       visualizer({
-         filename: 'docs/performance-artifacts/bundle-optimized.html',
-         template: 'treemap',
-         gzipSize: true,
-         brotliSize: true,
-         open: false,
-       }),
-     ],
-
-     build: {
-       rollupOptions: {
-         output: {
-           manualChunks(id) {
-             if (!id.includes('node_modules')) {
-               return
-             }
-
-             if (id.includes('/vue/')) {
-               return 'vue'
-             }
-
-             if (id.includes('vue-router')) {
-               return 'router'
-             }
-
-             if (
-               id.includes('chart.js') ||
-               id.includes('apexcharts') ||
-               id.includes('echarts') ||
-               id.includes('d3')
-             ) {
-               return 'visualization'
-             }
-
-             return 'vendor'
-           },
-         },
-       },
-     },
-   })
-   ```
-
-4. Si las dependencias de gráficos son locales o simuladas y no existen en `node_modules`, no fuerce el bloque `visualization`; las rutas dinámicas ya separarán `ReportsView` y sus importaciones transitivas.
-
-5. Ejecute una nueva compilación:
-
-   ```bash
-   pnpm run build
-   ```
-
-6. Revise el directorio de salida:
-
-   ```bash
-   ls -lh dist/assets
-   ```
-
-7. Abra el nuevo análisis visual:
-
-   ```bash
-   xdg-open docs/performance-artifacts/bundle-optimized.html
-   ```
-
-**Salida esperada:**
-
-La salida debe contener chunks separados con nombres similares a:
-
-```text
-vue-<hash>.js
-router-<hash>.js
-vendor-<hash>.js
-visualization-<hash>.js
-ReportsView-<hash>.js
-AdminView-<hash>.js
-ProductDetailView-<hash>.js
-```
-
-Los nombres exactos dependen de Vite, Rollup y la configuración del proyecto.
-
-**Verificación:**
-
-En el treemap optimizado, compruebe que:
-
-- Vue no está mezclado arbitrariamente con código de reportes.
-- Vue Router está separado.
-- Las librerías de gráficos, si existen, no forman parte del chunk crítico de catálogo.
-- Las vistas no críticas aparecen como chunks cargables bajo demanda.
-
-> **Criterio técnico:** no se trata de maximizar el número de chunks. La división debe responder a límites funcionales, rutas de navegación y posibilidades reales de reutilización de caché.
-
----
-
-### Paso 8. Optimizar imágenes con carga diferida y dimensiones explícitas
-
-**Objetivo:** reducir solicitudes de imágenes fuera de la ventana visible y prevenir cambios de diseño acumulados.
-
-**Instrucciones:**
-
-1. Localice las imágenes de producto en el componente de fila o tarjeta. Un patrón inicial habitual es:
-
-   ```vue
-   <img :src="product.imageUrl" :alt="product.name" />
-   ```
-
-2. Añada carga diferida, ancho, alto y decodificación asíncrona:
-
-   ```vue
-   <img
-     :src="product.imageUrl"
-     :alt="product.name"
-     width="96"
-     height="96"
-     loading="lazy"
-     decoding="async"
-   />
-   ```
-
-3. Mantenga dimensiones acordes con el diseño real. Si las tarjetas usan imágenes de 160 × 120 píxeles, use estas dimensiones:
-
-   ```vue
-   <img
-     :src="product.imageUrl"
-     :alt="product.name"
-     width="160"
-     height="120"
-     loading="lazy"
-     decoding="async"
-   />
-   ```
-
-4. No aplique `loading="lazy"` a una imagen que sea el contenido LCP de la pantalla inicial, como un hero principal. En el catálogo, las imágenes de productos fuera del viewport sí son candidatas apropiadas.
-
-5. Si se usan estilos CSS responsivos, preserve la relación de aspecto:
-
-   ```css
-   .product-image {
-     width: 96px;
-     height: 96px;
-     object-fit: cover;
-   }
-   ```
-
-6. Guarde los cambios y pruebe la vista de catálogo.
-
-**Salida esperada:**
-
-Las imágenes de productos que no estén visibles inicialmente deben descargarse conforme se acercan al viewport. La interfaz no debe presentar saltos visuales por falta de dimensiones reservadas.
-
-**Verificación:**
-
-En DevTools > **Network**:
-
-1. Recargue el catálogo con caché deshabilitada.
-2. Observe las solicitudes de imágenes.
-3. Compruebe que no se descargan todas las imágenes de productos de inmediato.
-4. Desplácese por la lista y confirme que aparecen solicitudes adicionales de imágenes según se necesiten.
-
----
-
-### Paso 9. Implementar memoización de filtros y ordenamiento
-
-**Objetivo:** evitar recalcular el mismo resultado filtrado y ordenado cuando los criterios no han cambiado.
-
-**Instrucciones:**
-
-1. Abra la vista de catálogo, por ejemplo:
-
-   ```text
-   src/views/CatalogView.vue
-   ```
-
-2. Identifique el `computed` que filtra y ordena productos. Una versión no optimizada puede tener esta estructura:
-
-   ```js
-   const filteredProducts = computed(() => {
-     const term = search.value.toLowerCase()
-
-     return products.value
-       .filter((product) => product.name.toLowerCase().includes(term))
-       .sort((a, b) => a.name.localeCompare(b.name))
-   })
-   ```
-
-3. Declare una caché fuera del `computed`. La clave debe derivarse de todos los filtros y criterios de ordenación que afectan el resultado:
-
-   ```js
-   const filterCache = new Map()
-   ```
-
-4. Cree una clave estable. Ajuste los nombres de referencias a los que use el proyecto:
-
-   ```js
-   const filterKey = computed(() => {
-     return JSON.stringify({
-       search: search.value.trim().toLocaleLowerCase(),
-       category: selectedCategory.value,
-       status: selectedStatus.value,
-       sort: sortBy.value,
-       direction: sortDirection.value,
-     })
-   })
-   ```
-
-5. Reemplace el `computed` de resultados por una versión memoizada:
-
-   ```js
-   const filteredProducts = computed(() => {
-     const key = filterKey.value
-     const cached = filterCache.get(key)
-
-     if (cached) {
-       return cached
-     }
-
-     performance.mark('catalog-filter-start')
-
-     const normalizedSearch = search.value.trim().toLocaleLowerCase()
-
-     const result = products.value
-       .filter((product) => {
-         const matchesSearch =
-           !normalizedSearch ||
-           product.name.toLocaleLowerCase().includes(normalizedSearch)
-
-         const matchesCategory =
-           !selectedCategory.value ||
-           product.category === selectedCategory.value
-
-         const matchesStatus =
-           !selectedStatus.value ||
-           product.status === selectedStatus.value
-
-         return matchesSearch && matchesCategory && matchesStatus
-       })
-       .toSorted((a, b) => {
-         const multiplier = sortDirection.value === 'desc' ? -1 : 1
-
-         if (sortBy.value === 'price') {
-           return (a.price - b.price) * multiplier
-         }
-
-         return a.name.localeCompare(b.name) * multiplier
-       })
-
-     performance.mark('catalog-filter-end')
-     performance.measure(
-       'catalog-filter-duration',
-       'catalog-filter-start',
-       'catalog-filter-end',
-     )
-
-     filterCache.set(key, result)
-
-     return result
-   })
-   ```
-
-6. Si el navegador objetivo no soporta `toSorted`, use una copia antes de ordenar:
-
-   ```js
-   const result = [...products.value]
-     .filter(/* criterio */)
-     .sort(/* ordenamiento */)
-   ```
-
-7. Limpie la caché cuando cambie la fuente de productos. Esto evita conservar resultados obsoletos si se recargan los datos:
-
-   ```js
-   watch(
-     () => products.value,
-     () => {
-       filterCache.clear()
-     },
-   )
-   ```
-
-8. Si la lista de productos es completamente estática durante la sesión, esta limpieza solo se ejecutará si cambia la referencia del arreglo.
-
-9. Para evitar crecimiento ilimitado de memoria si hay muchas combinaciones de filtros, limite el tamaño de la caché:
-
-   ```js
-   const MAX_FILTER_CACHE_ENTRIES = 30
-
-   function setCachedFilterResult(key, value) {
-     if (filterCache.size >= MAX_FILTER_CACHE_ENTRIES) {
-       const oldestKey = filterCache.keys().next().value
-       filterCache.delete(oldestKey)
-     }
-
-     filterCache.set(key, value)
-   }
-   ```
-
-10. Sustituya `filterCache.set(key, result)` por:
-
-   ```js
-   setCachedFilterResult(key, result)
-   ```
-
-**Salida esperada:**
-
-El resultado filtrado se calcula la primera vez que se utiliza una combinación de filtros y se reutiliza cuando se vuelve a esa misma combinación.
-
-**Verificación:**
-
-En la consola de Chrome, ejecute:
-
-```js
-performance.getEntriesByName('catalog-filter-duration').slice(-5)
-```
-
-Debe observar mediciones para cálculos no almacenados en caché. Al volver a una combinación ya usada, no debe agregarse una nueva medida de filtrado, porque se devuelve el arreglo memoizado.
-
-> **Nota:** la memoización reduce cálculos repetidos, pero no elimina por sí sola el coste de renderizar 2.000 nodos. El siguiente paso aborda ese coste mediante virtual scrolling.
-
----
-
-### Paso 10. Implementar virtual scrolling para el catálogo
-
-**Objetivo:** renderizar solo las filas visibles y una pequeña zona de reserva, en lugar de renderizar los 2.000 productos simultáneamente.
-
-**Instrucciones:**
-
-1. Cree el componente `src/components/VirtualProductList.vue`.
-
-2. Implemente una ventana virtual con altura fija por fila. El ejemplo siguiente usa filas de `112` píxeles y un contenedor de `560` píxeles de alto:
-
-   ```vue
-   <script setup>
-   import { computed, ref } from 'vue'
-   import ProductRow from './ProductRow.vue'
-
-   const props = defineProps({
-     products: {
-       type: Array,
-       required: true,
-     },
-   })
-
-   const ROW_HEIGHT = 112
-   const VIEWPORT_HEIGHT = 560
-   const OVERSCAN = 4
-
-   const scrollTop = ref(0)
-
-   const totalHeight = computed(() => {
-     return props.products.length * ROW_HEIGHT
-   })
-
-   const visibleStart = computed(() => {
-     return Math.max(
-       0,
-       Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN,
-     )
-   })
-
-   const visibleCount = computed(() => {
-     return Math.ceil(VIEWPORT_HEIGHT / ROW_HEIGHT) + OVERSCAN * 2
-   })
-
-   const visibleEnd = computed(() => {
-     return Math.min(
-       props.products.length,
-       visibleStart.value + visibleCount.value,
-     )
-   })
-
-   const visibleProducts = computed(() => {
-     return props.products.slice(visibleStart.value, visibleEnd.value)
-   })
-
-   const offsetY = computed(() => {
-     return visibleStart.value * ROW_HEIGHT
-   })
-
-   function handleScroll(event) {
-     scrollTop.value = event.currentTarget.scrollTop
-   }
-   </script>
-
-   <template>
-     <section
-       class="virtual-list"
-       aria-label="Resultados del catálogo"
-       :style="{ height: `${VIEWPORT_HEIGHT}px` }"
-       @scroll="handleScroll"
-     >
-       <div
-         class="virtual-list__spacer"
-         :style="{ height: `${totalHeight}px` }"
-       >
-         <div
-           class="virtual-list__content"
-           :style="{ transform: `translateY(${offsetY}px)` }"
-         >
-           <ProductRow
-             v-for="product in visibleProducts"
-             :key="product.id"
-             :product="product"
-             :style="{ height: `${ROW_HEIGHT}px` }"
-           />
-         </div>
-       </div>
-     </section>
+     <header>
+       <strong>Catálogo Pro</strong>
+       <!-- aria-label nombra el menú para los lectores de pantalla -->
+       <nav aria-label="Principal">
+         <RouterLink to="/">Catálogo</RouterLink>
+         <RouterLink to="/reportes">Reportes</RouterLink>
+         <RouterLink to="/admin">Administración</RouterLink>
+       </nav>
+     </header>
+     <!-- RouterView dibuja la vista de la ruta actual -->
+     <main><RouterView /></main>
    </template>
 
-   <style scoped>
-   .virtual-list {
-     overflow-y: auto;
-     position: relative;
-     contain: strict;
-   }
-
-   .virtual-list__spacer {
-     position: relative;
-   }
-
-   .virtual-list__content {
-     left: 0;
-     position: absolute;
-     right: 0;
-     top: 0;
-     will-change: transform;
-   }
+   <style>
+   body { margin: 0; font-family: system-ui, sans-serif; color: #1a1a1a; background: #fff; }
+   header { display: flex; gap: 1.5rem; align-items: center; padding: 0.75rem 1rem; background: #1e3a5f; color: #fff; }
+   nav { display: flex; gap: 1rem; }
+   nav a { color: #fff; }
+   main { padding: 1rem; }
    </style>
    ```
 
-3. Abra la vista de catálogo.
+5. Crea la carpeta `src/views` y en ella las dos vistas secundarias. Cópialas tal cual, no son el tema de hoy: solo existen para que haya rutas que no se ven al entrar. `src/views/AdminView.vue`:
 
-4. Reemplace el `v-for` que renderiza todos los productos por el componente virtual:
+   ```html
+   <template>
+     <h1>Administración</h1>
+     <p>Zona del equipo interno. Casi nadie la visita: no debe pesar en la carga inicial.</p>
+   </template>
+   ```
 
-   ```vue
+   `src/views/ReportesView.vue`:
+
+   ```html
+   <template>
+     <h1>Reportes</h1>
+     <p>Informes de ventas del mes. Pocas personas entran aquí: tampoco debe pesar en la carga inicial.</p>
+   </template>
+   ```
+
+6. Crea `src/components/FilaProducto.vue`, el componente de una fila:
+
+   ```html
    <script setup>
-   import VirtualProductList from '@/components/VirtualProductList.vue'
-
-   // filteredProducts ya existe en la vista.
+   const { fila } = defineProps({ fila: Object })   // producto que recibe; desestructurar es reactivo desde Vue 3.5
+   const emit = defineEmits(['vender'])              // aviso que la fila le manda a quien la usa
    </script>
 
    <template>
-     <section>
-       <!-- Controles de búsqueda, filtros y ordenamiento. -->
+     <article class="fila">
+       <small>Ref. {{ fila.id }}</small>
+       <strong>{{ fila.nombre }}</strong>
+       <span>{{ fila.tipo }}</span>
+       <span>{{ fila.precio }} USD</span>
+       <span>Stock: {{ fila.stock }}</span>
+       <button type="button" :aria-label="'Vender 1 de ' + fila.nombre" @click="emit('vender', fila.id)">Vender 1</button>
+     </article>
+   </template>
 
-       <p aria-live="polite">
-         {{ filteredProducts.length }} productos encontrados
-       </p>
+   <style scoped>
+   .fila { display: grid; grid-template-columns: 5rem 1fr 5rem 5rem 5rem 6rem; gap: 0.5rem; align-items: center;
+     height: 56px; box-sizing: border-box; padding: 0 0.5rem; border-bottom: 1px solid #ddd; }
+   </style>
+   ```
 
-       <VirtualProductList :products="filteredProducts" />
+   En los capítulos 1, 2 y 4 viste que desestructurar un objeto reactivo corta la conexión. `defineProps` es la excepción: desde Vue 3.5, en `<script setup>`, el compilador convierte cada `fila` en `props.fila`, así que la fila se sigue actualizando. Fuera de `defineProps` (con `reactive()` o un almacén de Pinia) la regla de antes sigue vigente.
+
+7. Crea `src/views/CatalogoView.vue`. Fíjate en `filtrar()`: es una función llamada desde la plantilla, y lleva un cronómetro (`performance.mark`) y un contador (`console.count`):
+
+   ```html
+   <script setup>
+   import { ref, shallowRef, onMounted } from 'vue'                     // funciones de Vue
+   import { pedirProductos } from '../datos/productos.js'               // la "API" de los datos
+   import FilaProducto from '../components/FilaProducto.vue'            // componente de una fila
+
+   const productos = shallowRef([])                                     // lista grande: shallowRef (capítulo 1)
+   const cargando = ref(true)                                           // estado de la petición (capítulo 5)
+   const busqueda = ref('')                                             // texto del buscador
+   const nodos = ref(0)                                                 // elementos que tiene la página
+   const filas = ref(0)                                                 // filas de producto dibujadas
+
+   onMounted(async () => {                                              // al mostrarse la vista...
+     productos.value = await pedirProductos()                           // ...espera la respuesta de la "API"
+     cargando.value = false                                             // y apaga el aviso de carga
+   })
+
+   function filtrar() {                                                 // se ejecuta en CADA dibujo de la vista
+     console.count('Cálculos del filtro')                               // suma 1 en la consola cada vez que se calcula
+     performance.mark('filtro-inicio')                                  // marca: arranca el cronómetro
+     const t = busqueda.value.trim().toLowerCase()                      // limpia el texto una sola vez
+     const resultado = productos.value.filter((p) => p.nombre.toLowerCase().includes(t)) // deja los que coinciden
+     performance.mark('filtro-fin')                                     // marca: para el cronómetro
+     const m = performance.measure('filtro', 'filtro-inicio', 'filtro-fin') // mide el tramo entre las dos marcas
+     console.log(`Filtro: ${m.duration.toFixed(2)} ms`)                 // muestra la duración con 2 decimales
+     return resultado                                                   // la lista filtrada
+   }
+
+   function vender(id) {                                                // resta 1 al stock de un producto
+     productos.value = productos.value.map((p) =>                       // shallowRef: se entrega una lista nueva...
+       (p.id === id ? { ...p, stock: p.stock - 1 } : p))                // ...con un objeto nuevo solo para ese producto
+   }
+
+   function contarNodos() {                                             // cuenta lo que hay en la página
+     nodos.value = document.querySelectorAll('*').length                // '*' significa todos los elementos
+     filas.value = document.querySelectorAll('.fila').length            // solo las filas de producto
+   }
+   </script>
+
+   <template>
+     <h1>Catálogo</h1>
+     <label>Buscar producto <input v-model="busqueda" type="search" /></label>
+     <button type="button" @click="contarNodos">Contar nodos</button>
+     <!-- aria-live: el lector de pantalla anuncia el número cuando cambia -->
+     <p aria-live="polite">Nodos en la página: {{ nodos }} - Filas dibujadas: {{ filas }}</p>
+     <p v-if="cargando">Cargando productos...</p>
+     <section v-else aria-label="Productos">
+       <FilaProducto v-for="p in filtrar()" :key="p.id" :fila="p" @vender="vender" />
      </section>
    </template>
    ```
 
-5. Elimine o comente el `v-for` anterior para evitar renderizar dos listas simultáneamente.
+8. Arranca el servidor de desarrollo con `npm run dev`, abre la dirección que muestra la terminal (`http://localhost:5173`) y abre la consola de Chrome con `F12`.
 
-6. Asegúrese de que `ProductRow` mantiene una altura fija compatible con `ROW_HEIGHT`. Ejemplo:
+**Primero, predice:** la lista ya está dibujada y la consola dice `Cálculos del filtro: 1`. Si pulsas **Contar nodos**, que no toca el filtro, ¿el filtro se vuelve a calcular?
 
-   ```css
-   .product-row {
-     box-sizing: border-box;
-     min-height: 112px;
-   }
-   ```
+9. Pulsa **Contar nodos**.
 
-7. Pruebe los siguientes escenarios:
-   - Lista completa de 2.000 productos.
-   - Búsqueda con pocos resultados.
-   - Búsqueda sin resultados.
-   - Desplazamiento rápido con rueda del ratón.
-   - Navegación desde una fila hacia el detalle del producto.
+**Qué debes ver:** "Nodos en la página: **más de 14.000** - Filas dibujadas: **2000**", y en la consola `Cálculos del filtro: 2` con una línea `Filtro: ... ms`. Sí se recalculó: una función en la plantilla se ejecuta en **cada** dibujo de la vista. Los enlaces Reportes y Administración también funcionan.
 
-**Salida esperada:**
+## Paso 2. Medir la línea base (7 minutos)
 
-El DOM debe contener únicamente un conjunto reducido de filas visibles, normalmente entre 10 y 25 según el tamaño del viewport y el valor de `OVERSCAN`, aunque existan 2.000 productos en memoria.
+**Qué vas a hacer y por qué:** sin el número de antes no puedes demostrar la mejora. Se mide la compilación de producción, no el servidor de desarrollo.
 
-**Verificación:**
-
-En DevTools > **Elements**, cuente aproximadamente las instancias de `.product-row`. No deben existir 2.000 nodos simultáneos.
-
-En la interfaz, el scrollbar debe conservar una altura proporcional a la cantidad total de resultados, permitiendo desplazarse hasta el final de la lista.
-
-> **Limitación conocida:** un virtual scroller de altura fija requiere que cada fila mantenga una altura estable. Si el contenido puede crecer por descripciones muy largas o cambios de idioma, deberá usar una estrategia de altura dinámica o truncar el contenido de la fila.
-
----
-
-### Paso 11. Aplicar `v-memo` a las filas de producto
-
-**Objetivo:** impedir actualizaciones innecesarias de filas visibles cuando sus propiedades relevantes no han cambiado.
-
-**Instrucciones:**
-
-1. Abra el componente de fila, por ejemplo:
-
-   ```text
-   src/components/ProductRow.vue
-   ```
-
-2. Asegúrese de que el componente recibe datos específicos y estables mediante props:
-
-   ```vue
-   <script setup>
-   defineProps({
-     product: {
-       type: Object,
-       required: true,
-     },
-   })
-   </script>
-   ```
-
-3. Aplique `v-memo` al elemento raíz repetido. Incluya únicamente dependencias que deban provocar una actualización visual:
-
-   ```vue
-   <template>
-     <article
-       v-memo="[
-         product.id,
-         product.name,
-         product.price,
-         product.stock,
-         product.status,
-         product.imageUrl
-       ]"
-       class="product-row"
-     >
-       <img
-         class="product-image"
-         :src="product.imageUrl"
-         :alt="product.name"
-         width="96"
-         height="96"
-         loading="lazy"
-         decoding="async"
-       />
-
-       <div class="product-row__content">
-         <h2>{{ product.name }}</h2>
-         <p>{{ product.description }}</p>
-         <strong>{{ product.price }} €</strong>
-         <span>Stock: {{ product.stock }}</span>
-       </div>
-     </article>
-   </template>
-   ```
-
-4. Si una fila tiene estado propio visible, como selección, favoritos o edición, incluya ese valor en el arreglo de `v-memo`. Ejemplo:
-
-   ```vue
-   v-memo="[product.id, product.name, product.price, isSelected]"
-   ```
-
-5. No incluya objetos completos, arreglos mutables o referencias que cambien en cada render, porque invalidarían la memoización con frecuencia:
-
-   ```vue
-   <!-- Evitar -->
-   <article v-memo="[product]">
-   ```
-
-6. Guarde los cambios y pruebe filtros, ordenamiento y desplazamiento.
-
-**Salida esperada:**
-
-Las filas que permanecen visibles y cuyos datos no cambian no deben actualizarse innecesariamente ante cambios reactivos ajenos a ellas.
-
-**Verificación:**
-
-1. Abra Vue Devtools si está disponible.
-2. Cambie un filtro o escriba en la búsqueda.
-3. Observe las actualizaciones de componentes.
-4. Las filas que no pertenecen a la ventana visible o no cambian no deben experimentar renderizados innecesarios.
-
-> **Uso apropiado de `v-memo`:** es una optimización dirigida. No debe aplicarse de forma indiscriminada a todos los componentes, porque puede ocultar actualizaciones que sí deberían mostrarse si el arreglo de dependencias está incompleto.
-
----
-
-### Paso 12. Repetir las mediciones con la SPA optimizada
-
-**Objetivo:** medir el impacto de los cambios bajo condiciones equivalentes a la línea base.
-
-**Instrucciones:**
-
-1. Ejecute la compilación final:
+1. En la terminal, detén el servidor con `Ctrl + C` y compila:
 
    ```bash
-   pnpm run build
+   npm run build
    ```
 
-2. Confirme que se genera el reporte visual optimizado:
+   **Qué debes ver:** en `dist/assets` aparece **un solo** archivo `index-....js` de unos 96 kB (unos 38 kB en la columna `gzip`, que es lo que viaja por la red), más un `index-....css` pequeño con los estilos. Todo el JavaScript llega junto. Así salió en la prueba (las letras del nombre cambian en cada compilación):
 
    ```text
-   docs/performance-artifacts/bundle-optimized.html
+   dist/index.html                  0.44 kB │ gzip:  0.29 kB
+   dist/assets/index-2SW5xH-G.css   0.43 kB │ gzip:  0.27 kB
+   dist/assets/index-B1z2xwd-.js   96.47 kB │ gzip: 37.71 kB
+   ✓ built in 5.82s
    ```
 
-3. Inicie la versión de producción:
+2. Sirve la compilación con `npm run preview`. Queda corriendo en esa terminal hasta que la detengas. Abre una **ventana de incógnito** de Chrome (`Ctrl + Mayús + N`; así las extensiones no alteran la medida) en `http://localhost:4173`.
 
-   ```bash
-   pnpm run preview -- --host localhost --port 4173
-   ```
+3. Lighthouse: `F12`, pestaña **Lighthouse**, modo **Navegación** (Navigation), dispositivo **Escritorio** (Desktop), solo la categoría **Rendimiento** (Performance), y pulsa **Analizar carga de página**. Anota la puntuación, LCP (cuándo aparece lo principal) y TBT (cuánto tiempo estuvo bloqueado el navegador). Revisa los diagnósticos: aparece **Evita un tamaño excesivo del DOM** (Avoid an excessive DOM size) con unos 14.000 elementos; el DOM es el árbol de elementos de la página. En un equipo rápido la puntuación puede salir en 100: en ese caso compara TBT y el tamaño del DOM.
 
-4. Abra una ventana de incógnito nueva.
+4. Rendimiento: pestaña **Performance**, pulsa grabar (`Ctrl + E`), escribe `19` en el buscador y detén la grabación. En la pista **Timings** busca las barras `filtro`: son tus `performance.measure`. Al lado verás el trabajo de redibujar 2.000 filas.
 
-5. Acceda a:
+5. Crea la carpeta `docs` y dentro `docs/performance-report.md` con esta plantilla. Llena la columna **Antes**:
 
-   ```text
-   http://localhost:4173
-   ```
+   ```md
+   # Informe de rendimiento - Catálogo Pro
 
-6. En DevTools > **Network**:
-   - Active **Disable cache**.
-   - Use el mismo perfil de red empleado en baseline.
-   - Recargue la página.
-   - Verifique que los chunks de reportes, administración y detalle no se cargan inicialmente.
+   Condiciones: mismo equipo, Chrome en ventana de incógnito, Lighthouse en modo Navegación y Escritorio, compilación servida con `npm run preview`.
 
-7. Ejecute Lighthouse con el mismo comando, pero cambie el nombre de salida:
-
-   ```bash
-   pnpm exec lighthouse http://localhost:4173 \
-     --only-categories=performance \
-     --output=html \
-     --output=json \
-     --output-path=docs/performance-artifacts/lighthouse-optimized \
-     --chrome-flags="--headless=new --no-sandbox"
-   ```
-
-8. Ejecute una segunda captura de Chrome DevTools Performance:
-   - CPU a `4× slowdown`.
-   - Misma secuencia de búsqueda, por ejemplo `monitor`.
-   - Mismo filtro u ordenamiento que en baseline.
-   - Misma ventana de incógnito y caché deshabilitada.
-
-9. Registre las métricas en:
-
-   ```bash
-   cat > docs/performance-artifacts/optimized-metrics.txt <<'EOF'
-   Escenario: carga inicial de http://localhost:4173
-   Caché: deshabilitada
-   Navegador: Chrome
-   Perfil de red:
-   Perfil de CPU:
-
-   Performance score:
-   FCP:
-   LCP:
-   TBT:
-   CLS:
-   Speed Index:
-
-   Tamaño del JS inicial:
-   Chunks bajo demanda:
-   Resultado de la interacción de filtrado:
-   Observaciones:
-   EOF
-   ```
-
-10. Compare ambos reportes visuales del bundle:
-    - `bundle-baseline.html`
-    - `bundle-optimized.html`
-
-**Salida esperada:**
-
-La versión optimizada debe mostrar, en términos generales:
-
-- Menor JavaScript crítico para la ruta inicial.
-- Chunks separados para rutas no críticas.
-- Menos nodos de productos en el DOM.
-- Menor trabajo de renderizado al interactuar con filtros.
-- Menos solicitudes iniciales de imágenes fuera de la ventana visible.
-- Mejora o mantenimiento de FCP, LCP, TBT y puntuación Lighthouse.
-
-**Verificación:**
-
-La optimización se considera válida si las métricas no empeoran de manera significativa y la aplicación conserva sus funcionalidades:
-
-- El catálogo carga y filtra correctamente.
-- La navegación a detalle funciona.
-- Reportes y administración cargan al acceder a sus rutas.
-- Las imágenes aparecen al desplazarse.
-- No hay errores en consola.
-- El puerto `3000` permanece sin servicios iniciados.
-
----
-
-### Paso 13. Documentar la comparación de rendimiento
-
-**Objetivo:** conservar evidencia técnica de la optimización y dejar una entrada clara para el laboratorio posterior.
-
-**Instrucciones:**
-
-1. Cree o actualice el archivo:
-
-   ```text
-   docs/performance-report.md
-   ```
-
-2. Use la siguiente plantilla. Reemplace los valores entre corchetes por métricas reales obtenidas en su equipo:
-
-   ```markdown
-   # Informe de rendimiento de Catalogo Pro
-
-   ## Contexto de medición
-
-   - Fecha: [fecha]
-   - Commit evaluado: [hash de git]
-   - URL medida: `http://localhost:4173`
-   - Navegador: [versión de Chrome]
-   - Caché: deshabilitada
-   - Perfil de red: [perfil utilizado]
-   - Perfil de CPU: [por ejemplo, 4× slowdown]
-   - Escenario de interacción: cargar catálogo y buscar `monitor`.
-
-   ## Métricas Lighthouse
-
-   | Métrica | Baseline | Optimizada | Variación |
-   |---|---:|---:|---:|
-   | Performance score | [valor] | [valor] | [variación] |
-   | FCP | [valor] | [valor] | [variación] |
-   | LCP | [valor] | [valor] | [variación] |
-   | TBT | [valor] | [valor] | [variación] |
-   | CLS | [valor] | [valor] | [variación] |
-   | Speed Index | [valor] | [valor] | [variación] |
-
-   ## Tamaño y composición de bundles
-
-   | Indicador | Baseline | Optimizada |
-   |---|---:|---:|
-   | JavaScript inicial principal | [valor] | [valor] |
-   | Número de chunks iniciales | [valor] | [valor] |
-   | Chunk de reportes descargado en `/` | Sí / No | Sí / No |
-   | Chunk de administración descargado en `/` | Sí / No | Sí / No |
-   | Dependencias de visualización en carga inicial | Sí / No | Sí / No |
-
-   ## Hallazgos baseline
-
-   1. [Hallazgo basado en Network.]
-   2. [Hallazgo basado en Performance.]
-   3. [Hallazgo basado en Lighthouse o visualizer.]
+   | Medida | Antes | Después |
+   |---|---|---|
+   | Archivos JavaScript en `dist/assets` | | |
+   | JavaScript que descarga el catálogo (kB gzip) | | |
+   | Puntuación de rendimiento de Lighthouse | | |
+   | LCP (s) | | |
+   | TBT (ms) | | |
+   | Nodos en la página del catálogo | | |
+   | Filas dibujadas | | |
+   | Cálculos del filtro al pulsar Contar nodos | | |
 
    ## Cambios aplicados
 
-   1. Se transformaron las rutas de detalle, reportes y administración en importaciones dinámicas.
-   2. Se configuraron `manualChunks` para separar Vue, Vue Router, dependencias de visualización y vendor.
-   3. Se añadieron `loading="lazy"`, dimensiones explícitas y `decoding="async"` a imágenes de productos.
-   4. Se implementó memoización de filtros mediante una clave derivada de filtros y ordenamiento.
-   5. Se reemplazó el renderizado completo por virtual scrolling de altura fija.
-   6. Se aplicó `v-memo` a las filas de producto con dependencias visuales explícitas.
-
-   ## Resultado de la interacción
-
-   - Baseline: [describir tareas largas, retraso percibido y renders.]
-   - Optimizada: [describir reducción de nodos y comportamiento.]
-   - Conclusión: [indicar qué coste dominante se redujo y qué limitaciones permanecen.]
-
-   ## Artefactos
-
-   - `docs/performance-artifacts/lighthouse-baseline.report.html`
-   - `docs/performance-artifacts/lighthouse-optimized.report.html`
-   - `docs/performance-artifacts/bundle-baseline.html`
-   - `docs/performance-artifacts/bundle-optimized.html`
-   - `docs/performance-artifacts/baseline-metrics.txt`
-   - `docs/performance-artifacts/optimized-metrics.txt`
+   ## Conclusión
    ```
 
-3. Obtenga el hash del commit actual:
+## Paso 3. Ver el mapa del paquete (2 minutos)
 
-   ```bash
-   git rev-parse --short HEAD
-   ```
+**Qué vas a hacer y por qué:** no se divide bien lo que no se ha pesado. El visualizador dibuja el paquete como rectángulos: el área de cada uno es su peso.
 
-4. Revise el estado de Git:
+Si `npm run preview` sigue abierto desde el paso 2, detenlo con `Ctrl + C` en su terminal.
 
-   ```bash
-   git status
-   ```
-
-5. Compruebe que solo se han añadido artefactos y modificaciones necesarias para la optimización.
-
-6. Cree un commit en la rama `main`:
-
-   ```bash
-   git add src vite.config.* package.json pnpm-lock.yaml docs
-   git commit -m "perf: optimize catalog rendering and route loading"
-   ```
-
-**Salida esperada:**
-
-Debe existir un informe `docs/performance-report.md` con métricas baseline y optimizadas, descripción de los cambios, evidencia y conclusión técnica.
-
-**Verificación:**
-
-Ejecute:
-
-```bash
-git status
-git log -1 --oneline
-```
-
-El repositorio debe contener el commit de optimización. La SPA optimizada y documentada será la entrada obligatoria del laboratorio `07-00-01`.
-
----
-
-## Validación y pruebas
-
-Ejecute las siguientes comprobaciones finales antes de considerar completado el laboratorio.
-
-### Validación de compilación
-
-```bash
-pnpm run build
-```
-
-**Resultado esperado:** la compilación termina sin errores y genera los chunks separados.
-
-### Validación funcional manual
-
-Con el servidor de previsualización activo:
-
-```bash
-pnpm run preview -- --host localhost --port 4173
-```
-
-Compruebe manualmente:
-
-| Escenario | Resultado esperado |
-|---|---|
-| Carga de `/` | El catálogo aparece sin errores. |
-| Búsqueda de productos | Los resultados se actualizan y la interfaz mantiene capacidad de respuesta. |
-| Filtro u ordenamiento | La cantidad visible y la posición del scroll se comportan de forma coherente. |
-| Desplazamiento rápido | Se renderizan filas visibles sin crear 2.000 elementos DOM. |
-| Navegación a detalle | El chunk se descarga al entrar y la ruta funciona. |
-| Navegación a reportes | El chunk de reportes se descarga bajo demanda. |
-| Navegación a administración | El chunk de administración se descarga bajo demanda. |
-| Carga de imágenes | Las imágenes fuera del viewport se solicitan progresivamente. |
-| Consola de Chrome | No hay errores de JavaScript ni advertencias críticas. |
-
-### Validación de red
-
-En DevTools > **Network**, con caché deshabilitada:
-
-1. Recargue `http://localhost:4173`.
-2. Filtre por `JS`.
-3. Confirme que las vistas no críticas no se descargan inicialmente.
-4. Navegue a `/reports`.
-5. Confirme que el chunk correspondiente se descarga en ese momento.
-6. Verifique que no hay solicitudes hacia el puerto `3000`.
-
-### Validación de rendimiento
-
-Compruebe que el informe incluye:
-
-- Lighthouse baseline y optimizado.
-- Tamaño de bundles baseline y optimizado.
-- Explicación de la causa dominante identificada.
-- Captura o evidencia de Performance para la interacción de filtrado.
-- Conclusión basada en medidas comparables, no en una única puntuación aislada.
-
----
-
-## Solución de problemas
-
-### Problema 1: Lighthouse no puede conectarse a `http://localhost:4173`
-
-**Síntoma:** el comando de Lighthouse muestra mensajes como `ERR_CONNECTION_REFUSED`, `Unable to connect to Chrome` o no genera los reportes esperados.
-
-**Causa:** el servidor de previsualización no está activo, el puerto `4173` está ocupado por otro proceso o Chrome está bloqueado por una instancia previa de Lighthouse.
-
-**Solución:**
-
-1. Compruebe si la SPA responde:
-
-   ```bash
-   curl -I http://localhost:4173
-   ```
-
-2. Si no responde, inicie la previsualización:
-
-   ```bash
-   pnpm run preview -- --host localhost --port 4173
-   ```
-
-3. Si el puerto está ocupado, identifique el proceso:
-
-   ```bash
-   lsof -i :4173
-   ```
-
-   En Windows PowerShell:
-
-   ```powershell
-   netstat -ano | Select-String ":4173"
-   ```
-
-4. Finalice únicamente el proceso que ocupa el puerto o reutilice el servidor correcto.
-
-5. Cierre instancias de Chrome controladas por automatización y vuelva a ejecutar Lighthouse.
-
----
-
-### Problema 2: El virtual scroller muestra espacios vacíos, saltos o productos superpuestos
-
-**Síntoma:** al desplazarse, algunas filas se solapan, hay espacios vacíos o la posición de la lista parece incorrecta.
-
-**Causa:** la altura real de `ProductRow` no coincide con la constante `ROW_HEIGHT`, o el contenido de una fila cambia dinámicamente y rompe el supuesto de altura fija.
-
-**Solución:**
-
-1. Inspeccione una fila en DevTools > **Elements** y mida su altura real.
-2. Ajuste `ROW_HEIGHT` para que coincida exactamente con la altura renderizada, incluyendo bordes y padding:
+1. Reemplaza todo `vite.config.js` por este. Conserva lo que trajo create-vue y agrega el visualizador. El mapa solo se genera cuando lo pides, para no alargar cada compilación:
 
    ```js
-   const ROW_HEIGHT = 112
+   import { fileURLToPath, URL } from 'node:url'                // convierte una dirección de archivo en ruta del disco
+   import { defineConfig } from 'vite'                          // ayuda para escribir la configuración
+   import vue from '@vitejs/plugin-vue'                         // enseña a Vite a leer archivos .vue
+   import vueDevTools from 'vite-plugin-vue-devtools'           // panel Vue DevTools (lo trajo create-vue)
+   import { visualizer } from 'rollup-plugin-visualizer'        // dibuja el mapa del paquete
+
+   export default defineConfig(({ mode }) => ({                 // mode vale 'analisis' con npm run build:analisis
+     plugins: [
+       vue(),                                                   // plugin de Vue
+       vueDevTools(),                                           // solo actúa con npm run dev: no entra en dist
+       mode === 'analisis' && visualizer({                      // el mapa solo se genera si se pide
+         filename: 'estadisticas.html',                         // archivo del mapa, en la carpeta del proyecto
+         gzipSize: true                                         // muestra también el peso comprimido
+       })
+     ],
+     resolve: {
+       alias: {
+         '@': fileURLToPath(new URL('./src', import.meta.url))  // '@' en un import significa la carpeta src
+       }
+     },
+   }))
    ```
 
-3. Aplique `box-sizing: border-box` a la fila:
+2. En `package.json`, debajo de la línea `"build": "vite build",` agrega:
 
-   ```css
-   .product-row {
-     box-sizing: border-box;
-     height: 112px;
-     overflow: hidden;
+   ```json
+   "build:analisis": "vite build --mode analisis",
+   ```
+
+3. Ejecuta `npm run build:analisis` y abre en Chrome el archivo `estadisticas.html` que aparece en la carpeta del proyecto (arrástralo a una pestaña).
+
+**Qué debes ver:** un rectángulo grande con `vue` y `vue-router` dentro de `node_modules`, y uno pequeño con tus archivos de `src`. Vue pesa más que todo tu código junto.
+
+## Paso 4. Rutas diferidas y manualChunks (6 minutos)
+
+**Qué vas a hacer y por qué:** quien abre el catálogo no necesita Reportes ni Administración. Con `import()` esas vistas viajan en fragmentos aparte que se descargan al visitarlas. Y con `manualChunks` Vue viaja en su propio archivo: cambia poco, así que se queda en la caché del navegador entre una publicación y otra.
+
+1. En `src/router/index.js`, borra las dos líneas `import ReportesView ...` e `import AdminView ...`, y reemplaza las dos rutas por estas:
+
+   ```js
+       { path: '/reportes', component: () => import('../views/ReportesView.vue') }, // se descarga al visitar la ruta
+       { path: '/admin', component: () => import('../views/AdminView.vue') }        // igual: fragmento aparte
+   ```
+
+2. En `vite.config.js`, agrega esta línea encima de `export default`:
+
+   ```js
+   const VUE = /node_modules[\\/](vue|@vue|vue-router)[\\/]/    // patrón: carpetas de Vue y de su enrutador
+   ```
+
+   `[\\/]` acepta cualquiera de las dos barras: `\` en las rutas de Windows y `/` en las de macOS y Linux. Así el patrón funciona en los tres sistemas.
+
+3. En el mismo archivo, entre el `},` que cierra `resolve` y el `}))` final, agrega el bloque `build`:
+
+   ```js
+     build: {
+       rollupOptions: {
+         output: {
+           manualChunks(id) {                                   // Vite la llama con la ruta de cada módulo
+             if (!id.includes('node_modules')) return           // código propio: Vite decide solo
+             if (VUE.test(id)) return 'vue'                     // Vue y el enrutador viajan juntos en vue-*.js
+             return 'vendor'                                    // cualquier otra librería externa
+           }
+         }
+       }
+     }
+   ```
+
+**Predice:** ¿cuántos archivos `.js` crees que va a crear la compilación ahora?
+
+4. Ejecuta `npm run build`.
+
+**Qué debes ver:** cuatro archivos: `vue-....js` (el grueso, unos 93 kB), `index-....js` (tu código, unos 5 kB), `ReportesView-....js` y `AdminView-....js` (menos de 1 kB cada uno). Además sale `index-....css` con los estilos. Con `npm run preview`, en la pestaña **Network** (Red) de Chrome, `ReportesView-....js` se descarga solo cuando entras a Reportes. Al terminar de mirar, detén `npm run preview` con `Ctrl + C`.
+
+## Paso 5. Memoizar el filtro con computed (4 minutos)
+
+**Qué vas a hacer y por qué:** en el paso 1 viste que el filtro se recalcula aunque nada suyo cambie. Un `computed` guarda el resultado (memoización) y solo recalcula cuando cambian `busqueda` o `productos`.
+
+**Dónde:** `src/views/CatalogoView.vue`. Si `npm run preview` sigue abierto, detenlo con `Ctrl + C`, y arranca otra vez `npm run dev`.
+
+1. En el `import` de `vue`, agrega `computed`:
+
+   ```js
+   import { ref, shallowRef, computed, onMounted } from 'vue'           // funciones de Vue
+   ```
+
+2. Cambia la primera y la última línea de la función. El cuerpo no cambia:
+
+   ```js
+   const filtrados = computed(() => {                                   // guarda el resultado; recalcula si cambian sus datos
+     // ... el cuerpo sigue igual ...
+   })
+   ```
+
+   La primera línea antes era `function filtrar() {` y la última `}`.
+
+3. En la plantilla, cambia `v-for="p in filtrar()"` por `v-for="p in filtrados"`. Sin paréntesis: un `computed` se lee como un dato.
+
+**Predice y comprueba:** recarga la página (`F5`) y pulsa **Contar nodos** tres veces.
+
+**Qué debes ver:** la consola se queda en `Cálculos del filtro: 1`. Si escribes en el buscador, suma uno por tecla: ese cálculo sí hace falta. Las filas dibujadas siguen en 2000; eso se arregla ahora.
+
+## Paso 6. Dibujar solo lo que se ve: lista virtual (6 minutos)
+
+**Qué vas a hacer y por qué:** la caja de la lista mide 560 píxeles y cada fila 56: solo se ven 10. La lista virtual dibuja esas 10 más 4 de reserva arriba y 4 abajo, y las mueve al desplazarte. Lo que cuesta no es calcular, es dibujar.
+
+1. Crea `src/components/ListaVirtual.vue`:
+
+   ```html
+   <script setup>
+   import { computed, ref } from 'vue'                                  // funciones de Vue
+   import FilaProducto from './FilaProducto.vue'                        // cada fila sigue siendo su componente
+
+   const { productos } = defineProps({ productos: Array })             // lista completa, ya filtrada (reactiva: Vue 3.5)
+   const emit = defineEmits(['vender'])                                 // reenvía el aviso de cada fila
+   const ALTO = 56                                                      // alto de una fila en px: igual al CSS de la fila
+   const VENTANA = 560                                                  // alto de la caja visible: caben 10 filas
+   const RESERVA = 4                                                    // filas extra arriba y abajo para no ver huecos
+   const CUANTAS = VENTANA / ALTO + RESERVA * 2                         // 10 + 8 = 18 filas dibujadas
+   const scrollTop = ref(0)                                             // cuántos px ha bajado la persona
+
+   const inicio = computed(() =>                                        // primera fila que se dibuja
+     Math.max(0, Math.floor(scrollTop.value / ALTO) - RESERVA))         // floor redondea abajo; max evita negativos
+   const visibles = computed(() =>                                      // solo este trozo llega a la página
+     productos.slice(inicio.value, inicio.value + CUANTAS))             // slice corta sin tocar la lista original
+   const alto = computed(() => productos.length * ALTO + 'px')          // alto de TODAS las filas, para la barra
+   const mover = computed(() => `translateY(${inicio.value * ALTO}px)`) // baja las filas a su lugar
+
+   function alDesplazar(e) {                                            // corre en cada movimiento de la barra
+     scrollTop.value = e.target.scrollTop                               // guarda cuánto se bajó
    }
+   </script>
+
+   <template>
+     <!-- tabindex="0": la caja recibe el foco y se desplaza con las flechas del teclado -->
+     <div class="ventana" tabindex="0" @scroll="alDesplazar">
+       <!-- el relleno da a la barra el tamaño de la lista entera -->
+       <div class="relleno" :style="{ height: alto }">
+         <div class="filas" :style="{ transform: mover }">
+           <!-- una fila por producto visible; key por id -->
+           <FilaProducto
+             v-for="p in visibles"
+             :key="p.id"
+             :fila="p"
+             @vender="emit('vender', $event)"
+           />
+         </div>
+       </div>
+     </div>
+   </template>
+
+   <style scoped>
+   .ventana { height: 560px; overflow-y: auto; border: 1px solid #ccc; }
+   .relleno { position: relative; }
+   .filas { position: absolute; top: 0; left: 0; right: 0; }
+   </style>
    ```
 
-4. Limite textos que puedan alterar la altura, por ejemplo con truncamiento CSS.
-5. Si el diseño requiere filas de altura variable, no mantenga esta implementación fija; adopte una biblioteca de virtualización compatible con tamaños dinámicos en una iteración posterior.
+2. En `CatalogoView.vue`, cambia la línea `import FilaProducto ...` por esta:
 
----
+   ```js
+   import ListaVirtual from '../components/ListaVirtual.vue'            // dibuja solo las filas que se ven
+   ```
+
+3. En la plantilla, reemplaza todo el bloque `<section ...> ... </section>` por esta línea:
+
+   ```html
+   <ListaVirtual v-else :productos="filtrados" @vender="vender" />
+   ```
+
+**Predice:** ¿cuántas filas dibujadas crees que vas a contar ahora?
+
+4. Desplázate un poco por la lista y pulsa **Contar nodos**.
+
+**Qué debes ver:** "Filas dibujadas: **18**" y menos de 200 nodos. La barra de desplazamiento sigue teniendo el tamaño de 2.000 productos, y con `Tab` y las flechas del teclado también puedes recorrerla.
+
+## Paso 7. Pistas de dibujo: v-memo y v-once (2 minutos)
+
+**Qué vas a hacer y por qué:** `v-memo` le promete a Vue que una fila solo cambia si cambian ciertos datos; si no cambian, Vue se la salta. `v-once` dibuja algo una vez y nunca más. Son promesas: si mientes, la pantalla queda vieja.
+
+1. En `ListaVirtual.vue`, reemplaza el comentario y el bloque `<FilaProducto ... />` por estos. Fíjate: el comentario promete precio y stock, pero a propósito la lista de `v-memo` solo trae el precio:
+
+   ```html
+           <!-- v-memo: Vue salta la fila si precio y stock no cambiaron -->
+           <FilaProducto
+             v-for="p in visibles"
+             :key="p.id"
+             v-memo="[p.precio]"
+             :fila="p"
+             @vender="emit('vender', $event)"
+           />
+   ```
+
+**Predice:** si pulsas **Vender 1** en la primera fila, ¿bajará el stock en pantalla?
+
+2. Pulsa **Vender 1** en la primera fila y mira su stock.
+
+   **Qué debes ver:** el stock no baja. El dato sí cambió, pero el stock no está en la lista de `v-memo`, así que Vue se salta la fila. Ese es el riesgo. Corrige la línea:
+
+   ```html
+   v-memo="[p.precio, p.stock]"
+   ```
+
+3. En `FilaProducto.vue`, reemplaza la línea `<small>Ref. {{ fila.id }}</small>` por estas dos:
+
+   ```html
+       <!-- v-once: la referencia se dibuja una sola vez, porque el id nunca cambia -->
+       <small v-once>Ref. {{ fila.id }}</small>
+   ```
+
+**Qué debes ver:** al pulsar **Vender 1**, el stock baja en uno y la referencia sigue igual.
+
+## Paso 8. Medir otra vez y cerrar el informe (5 minutos)
+
+1. Detén el servidor (`Ctrl + C`), ejecuta `npm run build` y `npm run preview`, y repite en incógnito Lighthouse y **Contar nodos**, en las mismas condiciones del paso 2.
+2. Llena la columna **Después** de `docs/performance-report.md`, anota los cambios del paso 4 al 7 y escribe una conclusión de dos líneas.
+
+**Qué debes ver:** menos JavaScript propio en la carga inicial (unos 6 kB en lugar de 96 kB en un solo archivo), unos 150 nodos en lugar de más de 14.000, 18 filas en lugar de 2.000, TBT más bajo (en la prueba, de 50 ms a 0 ms) y el aviso de DOM excesivo fuera de Lighthouse. Los números exactos dependen de tu equipo; lo que importa es la comparación justa.
+
+## Paso opcional. Imágenes con tamaño declarado (3 minutos)
+
+En `App.vue`, antes de `<strong>Catálogo Pro</strong>`, agrega el logotipo de Vue que trajo create-vue en `public/`:
+
+```html
+<img src="/favicon.ico" alt="" width="28" height="28" />   <!-- width y height reservan el espacio: la página no salta -->
+```
+
+`alt=""` indica que es decorativa. No lleva `loading="lazy"`: está arriba y se ve al entrar. `lazy` es para imágenes que quedan debajo del borde de la pantalla; en la imagen principal retrasaría el LCP.
+
+## Resultado esperado
+
+- Línea base guardada: paquete, LCP, TBT y Lighthouse.
+- Reportes y Administración en fragmentos aparte; Vue en `vue-....js`.
+- Catálogo con 18 filas dibujadas de 2.000 productos.
+- Filtro memoizado con `computed` y filas con `v-memo` y `v-once`.
+- `docs/performance-report.md` con el antes y el después.
+
+## Laboratorio resuelto
+
+La carpeta [`ejercicio-resuelto/`](ejercicio-resuelto/) de este capítulo tiene el proyecto terminado, igual al que construyes con esta guía. Úsalo para comparar al final o si te atascas: lo que se aprende está en escribirlo tú.
+
+```bash
+cd ejercicio-resuelto
+npm install              # instala las dependencias
+npx vite --port 5176     # arranca la aplicación en http://localhost:5176
+```
+
+## Problemas frecuentes
+
+| Lo que ves | Por qué pasa | Cómo se arregla |
+|---|---|---|
+| `npm error Missing script: "build:analisis"` | Falta el script en `package.json` | Haz el paso 3.2 y revisa la coma al final de la línea |
+| Lighthouse: `ERR_CONNECTION_REFUSED` o no carga la página | `npm run preview` no está corriendo | Arráncalo y usa el puerto que muestra (4173) |
+| `Port 5173 is in use, trying another one...` o `Port 4173 is in use` | Otro servidor (`dev` o `preview`) quedó abierto | Usa la dirección que muestra la terminal, o cierra el otro con `Ctrl + C` |
+| create-vue pregunta `Project name`, `Add TypeScript?` y más, o se queda esperando | Faltan las opciones o se escribieron detrás de un `--`, que PowerShell se come | Usa el comando de la preparación tal cual: `npx --yes create-vue@3.16.4 catalogo-pro --bare --router` |
+| `npm warn EBADENGINE` y luego Vite no arranca | Se usó `create-vue@latest`: las versiones nuevas traen Vite 7, que pide Node 20.19 o 22.12 en adelante | Borra la carpeta y créala con `create-vue@3.16.4`, o actualiza Node |
+| Pulsas **Contar nodos** o **Vender 1** y no cambia nada, justo después de guardar cambios con la pestaña cerrada | En la prueba en Windows pasó solo en la primera carga de la página tras cambiar archivos sin la pestaña abierta | Recarga con `F5`. Con la pestaña abierta mientras editas no pasa |
+| Lighthouse da 100 antes y después | El equipo es rápido y la página es pequeña | Compara TBT, el tamaño del DOM y los nodos: ahí está la diferencia |
+| La lista virtual muestra huecos o filas encimadas | `ALTO` no coincide con `height: 56px` de `.fila` | Deja los dos en 56 |
+| El stock no baja al pulsar Vender 1 | `v-memo` no incluye `p.stock` | Es la predicción del paso 7: agrega `p.stock` |
+| Al guardar un archivo, la consola repite cálculos y la lista vuelve a su estado inicial | Vite recarga el componente en caliente | Es normal en desarrollo; por eso los datos se copian con `[...productos]` |
 
 ## Limpieza
 
-1. Detenga el servidor de previsualización o desarrollo con `Ctrl + C`.
+En cada terminal con un servidor (`dev` o `preview`), pulsa `Ctrl + C`.
 
-2. No elimine los siguientes elementos, ya que son evidencia y entrada para el siguiente laboratorio:
+## Ejercicios de reserva
 
-   ```text
-   docs/performance-report.md
-   docs/performance-artifacts/
-   vite.config.js
-   vite.config.ts
-   src/components/VirtualProductList.vue
-   ```
+**Básico.** ¿Cada cuánto se redibuja la lista virtual? En `ListaVirtual.vue`, agrega `onUpdated` al `import` de `vue` (el gancho del ciclo de vida que corre después de cada redibujo) y, debajo de `const RESERVA = 4`, la línea `onUpdated(() => console.count('Redibujos de la lista'))`. Desplázate despacio por la lista: ¿cada cuántos píxeles suma uno?
 
-3. Revise el estado final del repositorio:
+<details>
+<summary>Solución</summary>
 
-   ```bash
-   git status
-   ```
+En los primeros 280 píxeles no suma nada: por la reserva de 4 filas, `inicio` se queda en 0. Desde ahí suma uno cada 56 píxeles, cuando una fila entra o sale de la caja. Un desplazamiento menor cambia `scrollTop`, pero `inicio`, `visibles` y `mover` dan el mismo resultado, y Vue no redibuja.
 
-4. Si aún no creó el commit final, hágalo:
+</details>
 
-   ```bash
-   git add src vite.config.* package.json pnpm-lock.yaml docs
-   git commit -m "perf: optimize catalog rendering and route loading"
-   ```
+**Medio.** Agrega al catálogo un selector de tipo (Audio, Cómputo, Hogar, Oficina) que filtre en el **mismo** `computed`, en un solo recorrido.
 
-5. Confirme que continúa trabajando únicamente en la rama `main`:
+<details>
+<summary>Solución</summary>
 
-   ```bash
-   git branch --show-current
-   ```
+```js
+const tipo = ref('')                                                 // '' significa todos los tipos
+// dentro de filtrados, en lugar de la línea del filter:
+const resultado = productos.value.filter((p) =>
+  p.nombre.toLowerCase().includes(t) && (!tipo.value || p.tipo === tipo.value))
+```
 
----
+```html
+<label>Tipo
+  <select v-model="tipo">
+    <option value="">Todos</option>
+    <option>Audio</option><option>Cómputo</option><option>Hogar</option><option>Oficina</option>
+  </select>
+</label>
+```
 
-## Resumen
+</details>
 
-En este laboratorio se aplicó un proceso de optimización basado en evidencia:
+**Avanzado.** Precarga el fragmento de Reportes cuando el cursor pasa por su enlace o el teclado le da el foco, y compruébalo en Network con `npm run preview`.
 
-1. Se estableció una línea base mediante compilación de producción, Lighthouse, Network, Performance y análisis de bundles.
-2. Se identificó la carga inicial de rutas no críticas y el coste de renderizar una lista extensa.
-3. Se aplicó code-splitting con `dynamic import()` y separación de dependencias con `manualChunks`.
-4. Se redujo el coste visual usando imágenes diferidas, dimensiones explícitas, memoización de filtros, virtual scrolling y `v-memo`.
-5. Se repitieron las mediciones en condiciones equivalentes y se documentó el impacto en `docs/performance-report.md`.
+<details>
+<summary>Solución</summary>
 
-La optimización resultante no debe evaluarse únicamente por una puntuación Lighthouse. La evidencia principal debe demostrar que la ruta crítica entrega menos JavaScript no esencial, que la lista crea menos nodos DOM y que la interacción de filtrado reduce el trabajo innecesario del hilo principal.
+En `App.vue`:
 
-### Recursos opcionales
+```html
+<script setup>
+function precargar() { import('./views/ReportesView.vue') }          // pide el fragmento antes del clic
+</script>
+```
 
-- [Vue: Optimización de rendimiento](https://vuejs.org/guide/best-practices/performance.html)
-- [Vue: `v-memo`](https://vuejs.org/api/built-in-directives.html#v-memo)
-- [Vite: Build Options](https://vite.dev/config/build-options)
-- [Chrome DevTools: Performance](https://developer.chrome.com/docs/devtools/performance)
-- [Lighthouse](https://developer.chrome.com/docs/lighthouse/overview)
-- [rollup-plugin-visualizer](https://github.com/btd/rollup-plugin-visualizer)
+```html
+<RouterLink to="/reportes" @mouseenter="precargar" @focus="precargar">Reportes</RouterLink>
+```
+
+`ReportesView-....js` aparece en Network al pasar el cursor, no al hacer clic. El navegador lo guarda y no lo vuelve a pedir.
+
+</details>
+
+## Código final de los archivos que cambiaron
+
+<details>
+<summary>src/router/index.js</summary>
+
+```js
+import { createRouter, createWebHistory } from 'vue-router'    // funciones del enrutador
+import CatalogoView from '../views/CatalogoView.vue'            // la vista de entrada sí va en el paquete inicial
+
+export default createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),          // direcciones limpias, sin #; BASE_URL vale '/'
+  routes: [
+    { path: '/', component: CatalogoView },                     // se necesita al abrir la página
+    { path: '/reportes', component: () => import('../views/ReportesView.vue') }, // se descarga al visitar la ruta
+    { path: '/admin', component: () => import('../views/AdminView.vue') }        // igual: fragmento aparte
+  ]
+})
+```
+
+</details>
+
+<details>
+<summary>vite.config.js</summary>
+
+```js
+import { fileURLToPath, URL } from 'node:url'                // convierte una dirección de archivo en ruta del disco
+import { defineConfig } from 'vite'                          // ayuda para escribir la configuración
+import vue from '@vitejs/plugin-vue'                         // enseña a Vite a leer archivos .vue
+import vueDevTools from 'vite-plugin-vue-devtools'           // panel Vue DevTools (lo trajo create-vue)
+import { visualizer } from 'rollup-plugin-visualizer'        // dibuja el mapa del paquete
+
+const VUE = /node_modules[\\/](vue|@vue|vue-router)[\\/]/    // patrón: carpetas de Vue y de su enrutador
+
+export default defineConfig(({ mode }) => ({                 // mode vale 'analisis' con npm run build:analisis
+  plugins: [
+    vue(),                                                   // plugin de Vue
+    vueDevTools(),                                           // solo actúa con npm run dev: no entra en dist
+    mode === 'analisis' && visualizer({                      // el mapa solo se genera si se pide
+      filename: 'estadisticas.html',                         // archivo del mapa, en la carpeta del proyecto
+      gzipSize: true                                         // muestra también el peso comprimido
+    })
+  ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url))  // '@' en un import significa la carpeta src
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {                                   // Vite la llama con la ruta de cada módulo
+          if (!id.includes('node_modules')) return           // código propio: Vite decide solo
+          if (VUE.test(id)) return 'vue'                     // Vue y el enrutador viajan juntos en vue-*.js
+          return 'vendor'                                    // cualquier otra librería externa
+        }
+      }
+    }
+  }
+}))
+```
+
+</details>
+
+<details>
+<summary>src/views/CatalogoView.vue</summary>
+
+```html
+<script setup>
+import { ref, shallowRef, computed, onMounted } from 'vue'           // funciones de Vue
+import { pedirProductos } from '../datos/productos.js'               // la "API" de los datos
+import ListaVirtual from '../components/ListaVirtual.vue'            // dibuja solo las filas que se ven
+
+const productos = shallowRef([])                                     // lista grande: shallowRef (capítulo 1)
+const cargando = ref(true)                                           // estado de la petición (capítulo 5)
+const busqueda = ref('')                                             // texto del buscador
+const nodos = ref(0)                                                 // elementos que tiene la página
+const filas = ref(0)                                                 // filas de producto dibujadas
+
+onMounted(async () => {                                              // al mostrarse la vista...
+  productos.value = await pedirProductos()                           // ...espera la respuesta de la "API"
+  cargando.value = false                                             // y apaga el aviso de carga
+})
+
+const filtrados = computed(() => {                                   // guarda el resultado; recalcula si cambian sus datos
+  console.count('Cálculos del filtro')                               // suma 1 en la consola cada vez que se calcula
+  performance.mark('filtro-inicio')                                  // marca: arranca el cronómetro
+  const t = busqueda.value.trim().toLowerCase()                      // limpia el texto una sola vez
+  const resultado = productos.value.filter((p) => p.nombre.toLowerCase().includes(t)) // deja los que coinciden
+  performance.mark('filtro-fin')                                     // marca: para el cronómetro
+  const m = performance.measure('filtro', 'filtro-inicio', 'filtro-fin') // mide el tramo entre las dos marcas
+  console.log(`Filtro: ${m.duration.toFixed(2)} ms`)                 // muestra la duración con 2 decimales
+  return resultado                                                   // la lista filtrada
+})
+
+function vender(id) {                                                // resta 1 al stock de un producto
+  productos.value = productos.value.map((p) =>                       // shallowRef: se entrega una lista nueva...
+    (p.id === id ? { ...p, stock: p.stock - 1 } : p))                // ...con un objeto nuevo solo para ese producto
+}
+
+function contarNodos() {                                             // cuenta lo que hay en la página
+  nodos.value = document.querySelectorAll('*').length                // '*' significa todos los elementos
+  filas.value = document.querySelectorAll('.fila').length            // solo las filas de producto
+}
+</script>
+
+<template>
+  <h1>Catálogo</h1>
+  <label>Buscar producto <input v-model="busqueda" type="search" /></label>
+  <button type="button" @click="contarNodos">Contar nodos</button>
+  <!-- aria-live: el lector de pantalla anuncia el número cuando cambia -->
+  <p aria-live="polite">Nodos en la página: {{ nodos }} - Filas dibujadas: {{ filas }}</p>
+  <p v-if="cargando">Cargando productos...</p>
+  <ListaVirtual v-else :productos="filtrados" @vender="vender" />
+</template>
+```
+
+</details>
+
+<details>
+<summary>src/components/ListaVirtual.vue</summary>
+
+```html
+<script setup>
+import { computed, ref } from 'vue'                                  // funciones de Vue
+import FilaProducto from './FilaProducto.vue'                        // cada fila sigue siendo su componente
+
+const { productos } = defineProps({ productos: Array })             // lista completa, ya filtrada (reactiva: Vue 3.5)
+const emit = defineEmits(['vender'])                                 // reenvía el aviso de cada fila
+const ALTO = 56                                                      // alto de una fila en px: igual al CSS de la fila
+const VENTANA = 560                                                  // alto de la caja visible: caben 10 filas
+const RESERVA = 4                                                    // filas extra arriba y abajo para no ver huecos
+const CUANTAS = VENTANA / ALTO + RESERVA * 2                         // 10 + 8 = 18 filas dibujadas
+const scrollTop = ref(0)                                             // cuántos px ha bajado la persona
+
+const inicio = computed(() =>                                        // primera fila que se dibuja
+  Math.max(0, Math.floor(scrollTop.value / ALTO) - RESERVA))         // floor redondea abajo; max evita negativos
+const visibles = computed(() =>                                      // solo este trozo llega a la página
+  productos.slice(inicio.value, inicio.value + CUANTAS))             // slice corta sin tocar la lista original
+const alto = computed(() => productos.length * ALTO + 'px')          // alto de TODAS las filas, para la barra
+const mover = computed(() => `translateY(${inicio.value * ALTO}px)`) // baja las filas a su lugar
+
+function alDesplazar(e) {                                            // corre en cada movimiento de la barra
+  scrollTop.value = e.target.scrollTop                               // guarda cuánto se bajó
+}
+</script>
+
+<template>
+  <!-- tabindex="0": la caja recibe el foco y se desplaza con las flechas del teclado -->
+  <div class="ventana" tabindex="0" @scroll="alDesplazar">
+    <!-- el relleno da a la barra el tamaño de la lista entera -->
+    <div class="relleno" :style="{ height: alto }">
+      <div class="filas" :style="{ transform: mover }">
+        <!-- v-memo: Vue salta la fila si precio y stock no cambiaron -->
+        <FilaProducto
+          v-for="p in visibles"
+          :key="p.id"
+          v-memo="[p.precio, p.stock]"
+          :fila="p"
+          @vender="emit('vender', $event)"
+        />
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.ventana { height: 560px; overflow-y: auto; border: 1px solid #ccc; }
+.relleno { position: relative; }
+.filas { position: absolute; top: 0; left: 0; right: 0; }
+</style>
+```
+
+</details>
+
+<details>
+<summary>src/components/FilaProducto.vue</summary>
+
+```html
+<script setup>
+const { fila } = defineProps({ fila: Object })   // producto que recibe; desestructurar es reactivo desde Vue 3.5
+const emit = defineEmits(['vender'])              // aviso que la fila le manda a quien la usa
+</script>
+
+<template>
+  <article class="fila">
+    <!-- v-once: la referencia se dibuja una sola vez, porque el id nunca cambia -->
+    <small v-once>Ref. {{ fila.id }}</small>
+    <strong>{{ fila.nombre }}</strong>
+    <span>{{ fila.tipo }}</span>
+    <span>{{ fila.precio }} USD</span>
+    <span>Stock: {{ fila.stock }}</span>
+    <button type="button" :aria-label="'Vender 1 de ' + fila.nombre" @click="emit('vender', fila.id)">Vender 1</button>
+  </article>
+</template>
+
+<style scoped>
+.fila { display: grid; grid-template-columns: 5rem 1fr 5rem 5rem 5rem 6rem; gap: 0.5rem; align-items: center;
+  height: 56px; box-sizing: border-box; padding: 0 0.5rem; border-bottom: 1px solid #ddd; }
+</style>
+```
+
+</details>
+
+## Recursos
+
+- [Rendimiento en Vue](https://vuejs.org/guide/best-practices/performance): técnicas oficiales, incluidas la lista virtual y `v-memo`.
+- [v-memo](https://vuejs.org/api/built-in-directives#v-memo): la directiva y su riesgo.
+- [Carga diferida de rutas](https://router.vuejs.org/guide/advanced/lazy-loading): `import()` en Vue Router.
+- [Opciones de compilación de Vite](https://v6.vite.dev/config/build-options): `rollupOptions` y `manualChunks`.
+- [Lighthouse](https://developer.chrome.com/docs/lighthouse/overview): qué mide cada número.
+
+## Control de cambios
+
+| Versión | Fecha | Autor | Cambio |
+|---|---|---|---|
+| 2.0 | 2026-10-16 | Andrés Eduardo García Márquez | Guía reescrita: se construye desde una carpeta vacía con todo el código en la guía, sin repositorio inicial; 8 pasos de 46 minutos con predicción y resultado visible en cada uno |
+| 2.1 | 2026-10-16 | Andrés Eduardo García Márquez | Validada por línea de comandos en Windows 11 y Linux: `npx --yes create-vite@6.4`; Node 20 o 22; vista Reportes recortada (131 líneas para copiar en el paso 1); explicación de `defineProps` desestructurado en Vue 3.5 y de `[\\/]`; `Ctrl + C` al cambiar de servidor; predicción de `v-memo` antes del resultado; tamaños reales del paquete y de Lighthouse; ejercicio básico con `onUpdated` (`onRenderTriggered` no informa el dato cuando el cambio llega por un `computed`); tiempos 5-9-7-2-6-4-6-2-5 |
+| 2.2 | 2026-10-17 | Andrés Eduardo García Márquez | El proyecto se crea con create-vue, la herramienta oficial de Vue que enseñan los manuales: `npx --yes create-vue@3.16.4 catalogo-pro --bare --router` (Vue Router ya conectado; sale el `npm install vue-router` manual y el borrado de archivos de la plantilla); tabla de lo que trae el proyecto; `src/router/index.js` en lugar de `src/router.js`; `vite.config.js` conserva Vue DevTools y el atajo `@`; logotipo `public/favicon.ico` en el paso opcional; tamaños del paquete medidos de nuevo (96 kB antes; 93 kB de Vue y 6 kB propios después); dos filas nuevas en Problemas frecuentes. Validada por línea de comandos en Windows 11 y Linux |
