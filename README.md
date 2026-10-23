@@ -2,7 +2,7 @@
   <img src="https://static.wixstatic.com/media/96edd2_934dddb3230b4b16b1d1c56c51143738~mv2.png" alt="Logo de Netec" width="300"/>
 </a>
 
-# Vue Intermedio (VUE_INT)
+# Vue Intermedio 
 
 ## Plataforma de laboratorios
 
