@@ -10,7 +10,7 @@ Te damos la bienvenida a la plataforma de laboratorios del curso Vue Intermedio.
 
 ## Lista de laboratorios
 
-Haz clic en el título de cada práctica para abrir su guía en GitHub Pages. Las descripciones corresponden a la columna «Qué construyes» del README original del repositorio.
+Haz clic en el título de cada práctica para abrir su guía en GitHub Pages. 
 
 ## Capítulo 1
 
